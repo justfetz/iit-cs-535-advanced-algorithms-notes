@@ -1,4 +1,6 @@
-# The paper network
+# The paper network (course write-up snapshot)
+
+> The project now lives at **https://github.com/justfetz/the-paper-network** (model, data, notes, dashboard, ingestion scripts). This folder keeps the CS 535 Lecture-7 framing: the write-up page in `out/` and the model as it stood at the first run; see the main repo for the current version.
 
 A free-data model of the US containerboard → corrugated box supply chain, solved as a
 min-cost transshipment problem (CS 535, Lecture 7), with the 2025 mill closures, a
