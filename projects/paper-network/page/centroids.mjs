@@ -1,0 +1,11 @@
+import fs from "node:fs";
+import * as topojson from "topojson-client";
+import { geoCentroid, geoArea } from "d3-geo";
+const us = JSON.parse(fs.readFileSync("node_modules/us-atlas/counties-10m.json","utf8"));
+const counties = topojson.feature(us, us.objects.counties).features;
+const states = topojson.feature(us, us.objects.states).features;
+const rows = counties.map(f => { const c = geoCentroid(f); return [f.id, JSON.stringify(f.properties.name), c[1].toFixed(4), c[0].toFixed(4), (geoArea(f)*6371**2).toFixed(0)].join(","); });
+fs.writeFileSync("county_centroids.csv", "fips,name,lat,lon,area_km2\n" + rows.join("\n") + "\n");
+const srows = states.map(f => { const c = geoCentroid(f); return [f.id, JSON.stringify(f.properties.name), c[1].toFixed(4), c[0].toFixed(4)].join(","); });
+fs.writeFileSync("state_centroids.csv", "fips,name,lat,lon\n" + srows.join("\n") + "\n");
+console.log("counties", rows.length, "states", srows.length);

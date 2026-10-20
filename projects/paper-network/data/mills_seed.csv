@@ -1,0 +1,80 @@
+owner,mill_name,city,state,country,grades,capacity_tons_per_year,status_oct2026,status_note,confidence
+International Paper,Bogalusa,Bogalusa,LA,US,kraft_linerboard,1230000,open,,seed
+International Paper,Red River (Campti),Campti,LA,US,kraft_linerboard;semichem_medium,800000,closed,closed 2025 (announced Jan 2025),seed
+International Paper,Cedar Rapids,Cedar Rapids,IA,US,recycled_linerboard;recycled_medium,1100000,open,,seed
+International Paper,Henderson,Henderson,KY,US,recycled_medium;semichem_medium,530000,open,,seed
+International Paper,Mansfield,Mansfield,LA,US,kraft_linerboard;semichem_medium,1250000,open,,seed
+International Paper,Maysville,Maysville,KY,US,kraft_linerboard;recycled_linerboard,1000000,open,,seed
+International Paper,Newport,Newport,IN,US,recycled_medium;recycled_linerboard,480000,open,,seed
+International Paper,Orange,Orange,TX,US,kraft_linerboard,800000,closed,closed Q4 2023,seed
+International Paper,Pensacola (Cantonment),Cantonment,FL,US,kraft_linerboard,1000000,open,,seed
+International Paper,Prattville,Prattville,AL,US,kraft_linerboard,1020000,open,,seed
+International Paper,Riceboro,Riceboro,GA,US,kraft_linerboard,430000,closed,closed 2025,seed
+International Paper,Rome,Rome,GA,US,kraft_linerboard,1090000,open,,seed
+International Paper,Savannah,Savannah,GA,US,kraft_linerboard,1000000,closed,closed 2025,seed
+International Paper,Springfield,Springfield,OR,US,recycled_linerboard;recycled_medium,480000,open,,seed
+International Paper,Valliant,Valliant,OK,US,kraft_linerboard,1160000,open,,seed
+International Paper,Vicksburg,Vicksburg,MS,US,kraft_linerboard,680000,open,,seed
+International Paper,Riverdale (Selma),Selma,AL,US,kraft_linerboard;white_top_linerboard,450000,open,No.16 conversion to containerboard planned 2026,seed
+Smurfit Westrock,Fernandina Beach,Fernandina Beach,FL,US,kraft_linerboard,850000,open,,seed
+Smurfit Westrock,Florence,Florence,SC,US,kraft_linerboard;semichem_medium,1050000,open,,seed
+Smurfit Westrock,Hodge,Hodge,LA,US,kraft_linerboard;semichem_medium,770000,open,,seed
+Smurfit Westrock,Hopewell,Hopewell,VA,US,kraft_linerboard,900000,open,,seed
+Smurfit Westrock,Longview,Longview,WA,US,kraft_linerboard;semichem_medium,1100000,open,,seed
+Smurfit Westrock,Panama City,Panama City,FL,US,kraft_linerboard,500000,closed,closed 2022,seed
+Smurfit Westrock,Seminole,Jacksonville,FL,US,recycled_medium;recycled_linerboard,480000,open,,seed
+Smurfit Westrock,Solvay,Syracuse,NY,US,recycled_linerboard;recycled_medium,450000,open,,seed
+Smurfit Westrock,Stevenson,Stevenson,AL,US,semichem_medium,670000,open,,seed
+Smurfit Westrock,Tacoma,Tacoma,WA,US,kraft_linerboard,500000,closed,closed 2021,seed
+Smurfit Westrock,West Point,West Point,VA,US,kraft_linerboard;semichem_medium,1100000,open,,seed
+Smurfit Westrock,Cowpens,Cowpens,SC,US,recycled_medium,320000,open,,seed
+Smurfit Westrock,Dublin,Dublin,GA,US,kraft_linerboard,480000,open,,seed
+Smurfit Westrock,Eaton,Eaton,IN,US,recycled_medium,260000,open,,seed
+Smurfit Westrock,Uncasville,Uncasville,CT,US,recycled_medium,160000,open,,seed
+Smurfit Westrock,North Charleston,North Charleston,SC,US,kraft_linerboard,550000,closed,closed 2023,seed
+Smurfit Westrock,Forney,Forney,TX,US,recycled_medium,300000,closed,closed 2025,seed
+Smurfit Westrock,Orange (Smurfit Kappa),Orange,TX,US,recycled_medium,160000,open,,seed
+Smurfit Westrock,La Tuque,La Tuque,QC,CA,kraft_linerboard,500000,open,,seed
+Packaging Corp of America,Counce,Counce,TN,US,kraft_linerboard,1100000,open,,seed
+Packaging Corp of America,Valdosta,Valdosta,GA,US,kraft_linerboard,600000,open,,seed
+Packaging Corp of America,Tomahawk,Tomahawk,WI,US,semichem_medium,570000,open,,seed
+Packaging Corp of America,Filer City,Filer City,MI,US,semichem_medium;recycled_medium,450000,open,,seed
+Packaging Corp of America,DeRidder,DeRidder,LA,US,kraft_linerboard;semichem_medium,1000000,open,,seed
+Packaging Corp of America,Wallula,Wallula,WA,US,kraft_linerboard,400000,open,No.2 medium machine shut 2025 reconfiguration,seed
+Packaging Corp of America,Jackson,Jackson,AL,US,kraft_linerboard,700000,open,converted from UFS 2020-2023,seed
+Packaging Corp of America,Massillon (ex-Greif),Massillon,OH,US,recycled_medium;recycled_linerboard,400000,open,acquired from Greif Sept 2025,seed
+Packaging Corp of America,Riverville (ex-Greif),Amherst,VA,US,recycled_medium;recycled_linerboard,400000,open,acquired from Greif Sept 2025,seed
+Georgia-Pacific,Cedar Springs,Cedar Springs,GA,US,kraft_linerboard;semichem_medium,1000000,closed,closed Aug 2025,seed
+Georgia-Pacific,Toledo,Toledo,OR,US,kraft_linerboard;semichem_medium,650000,open,,seed
+Georgia-Pacific,Monticello,Monticello,MS,US,kraft_linerboard,950000,open,,seed
+Georgia-Pacific,Brewton,Brewton,AL,US,white_top_linerboard,400000,open,,seed
+Georgia-Pacific,Big Island,Big Island,VA,US,recycled_medium,380000,open,,seed
+Pratt Industries,Conyers,Conyers,GA,US,recycled_linerboard;recycled_medium,400000,open,,seed
+Pratt Industries,Staten Island,Staten Island,NY,US,recycled_linerboard;recycled_medium,380000,open,,seed
+Pratt Industries,Valparaiso,Valparaiso,IN,US,recycled_linerboard;recycled_medium,400000,open,,seed
+Pratt Industries,Shreveport,Shreveport,LA,US,recycled_linerboard;recycled_medium,360000,open,,seed
+Pratt Industries,Wapakoneta,Wapakoneta,OH,US,recycled_linerboard;recycled_medium,400000,open,,seed
+Pratt Industries,Henderson,Henderson,KY,US,recycled_linerboard;recycled_medium,500000,open,started 2023,seed
+Green Bay Packaging,Green Bay,Green Bay,WI,US,recycled_linerboard;recycled_medium,685000,open,started 2021,seed
+Green Bay Packaging,Arkansas Kraft (Morrilton),Morrilton,AR,US,kraft_linerboard,520000,open,$1B expansion to ~1.03M tons by 2027-28,seed
+Greenpac (Cascades),Greenpac Niagara Falls,Niagara Falls,NY,US,recycled_linerboard,540000,open,,seed
+Cascades,Niagara Falls,Niagara Falls,NY,US,recycled_medium,220000,open,,seed
+Cascades,Bear Island,Ashland,VA,US,recycled_linerboard;recycled_medium,465000,open,started 2023,seed
+Cascades,Cabano,Temiscouata-sur-le-Lac,QC,CA,recycled_medium,230000,open,,seed
+New-Indy Containerboard,Catawba,Catawba,SC,US,kraft_linerboard,500000,open,converted 2021,seed
+New-Indy Containerboard,Ontario,Ontario,CA,US,recycled_linerboard;recycled_medium,350000,open,,seed
+New-Indy Containerboard,Oxnard,Oxnard,CA,US,recycled_medium,200000,open,,seed
+New-Indy Containerboard,Hartford City,Hartford City,IN,US,recycled_medium;recycled_linerboard,280000,open,,seed
+ND Paper,Biron,Biron,WI,US,recycled_linerboard;recycled_medium,550000,open,converted 2019,seed
+ND Paper,Rumford,Rumford,ME,US,recycled_linerboard,270000,open,partial conversion 2019,seed
+ND Paper,Fairmont,Fairmont,WV,US,recycled_medium,180000,open,,seed
+Domtar,Kingsport,Kingsport,TN,US,recycled_linerboard;recycled_medium,600000,open,converted 2023,seed
+Hood Container,St. Francisville,St. Francisville,LA,US,kraft_linerboard,350000,open,,seed
+Port Townsend Paper,Port Townsend,Port Townsend,WA,US,kraft_linerboard;semichem_medium,300000,open,,seed
+McKinley Paper (Bio Pappel),Prewitt,Prewitt,NM,US,recycled_linerboard,230000,open,,seed
+McKinley Paper (Bio Pappel),Port Angeles,Port Angeles,WA,US,recycled_linerboard,240000,idled,curtailed 2023,seed
+Liberty Paper,Becker,Becker,MN,US,recycled_medium,230000,open,,seed
+Jackson Paper,Sylva,Sylva,NC,US,recycled_medium,130000,open,,seed
+Kruger,Trois-Rivieres,Trois-Rivieres,QC,CA,recycled_linerboard,360000,open,converted 2021-22,seed
+Atlantic Packaging,Whitby,Whitby,ON,CA,recycled_linerboard;recycled_medium,450000,open,,seed
+Irving Paper,Lake Utopia,Saint George,NB,CA,semichem_medium,230000,open,,seed

@@ -1,0 +1,107 @@
+<nav class="top">
+  <a href="{{home}}">← jason fetzer</a>
+  <a href="{{writing}}">writing</a>
+  {{theme_button}}
+</nav>
+
+<p class="meta">2026-10-20 · network flow · linear programming · python · d3</p>
+<h1>The paper network: {{n_us_open}} mills, 441 box markets, one min-cost flow</h1>
+<p class="lede">A corrugated box starts as rolls of linerboard and medium from a containerboard mill, and there are about {{n_us_open}} of those mills left in the United States. Where they are is public: 10-Ks, closure notices, trade press. Where the boxes get made is roughly where the people and the factories are. The freight between the two decides who ships to whom. Put those three facts into a min-cost transshipment model, the problem from Lecture 7 of CS 535, and you get a map the industry does not publish: the flows. Here it is, with the 2025 closures, a maintenance calendar, and what the network does when a big mill goes dark.</p>
+
+<div class="viz" id="mapviz">
+  <div class="bar" id="scen"><span class="lbl">Scenario</span>
+    <button type="button" data-scen="fp2024" aria-pressed="false">End of 2024</button>
+    <button type="button" data-scen="fp2026" aria-pressed="true">October 2026</button>
+    <button type="button" data-scen="cf2026" aria-pressed="false">2026 mills, 2024 demand</button>
+    <select id="month" aria-label="Maintenance month"><option value="">Maintenance month…</option></select>
+    <select id="ko" aria-label="Knock out a mill"><option value="">Knock out a mill…</option></select>
+  </div>
+  <div class="bar" id="layers"><span class="lbl">Show</span>
+    <button type="button" data-layer="flows" aria-pressed="true">Own-system flows</button>
+    <button type="button" data-layer="market" aria-pressed="true">Open-market flows</button>
+    <button type="button" data-layer="exports" aria-pressed="false">Exports</button>
+    <button type="button" data-layer="demand" aria-pressed="true">Demand points</button>
+    <button type="button" data-layer="shadow" aria-pressed="false">Color mills by scarcity</button>
+    <button type="button" data-layer="mc" aria-pressed="false">Color demand by delivered cost</button>
+  </div>
+  <div id="map"></div>
+  <div id="legend" aria-label="Owners; click to isolate"></div>
+  <div id="stats"></div>
+</div>
+<p class="small">Circles are mills, sized by annual capacity and colored by owner; hollow dashed circles are mills that have closed. Squares are demand points: the {{n_nodes}} largest counties, each carrying the smaller counties around it, sized by the tons of board their box plants use in a year. Lines are the solver's flows, colored when a mill feeds its own company's box plants and gray when the board is sold on the open market. Hover a mill for its utilization and the value of one more ton of its capacity; hover a square for who supplies it and what the last ton costs delivered.</p>
+
+<h2>Where the numbers come from</h2>
+<p>No free source lists every containerboard mill with its tonnage, so the table was assembled the way an analyst would: company by company. International Paper's 10-K gives one number for US containerboard capacity, 12,984 thousand tons at the end of 2024, and names the mills; the per-mill tonnages come from older filings, closure announcements (Orange 800k, Campti 800k, Riceboro 430k, Savannah 1,000k) and local reporting, and they add up to within 1% of the 10-K figure. Smurfit Westrock publishes a mill-by-mill capacity table in its 10-K, which is where its eleven US mills come from. PCA reports 5.8 million tons across ten mills after buying Greif's two in September 2025; the split between them is anchored to earlier filings and scaled. Georgia-Pacific, Pratt, Green Bay Packaging, Cascades, New-Indy, ND Paper, Domtar and a dozen smaller producers come from press releases and trade press, and every row carries a confidence flag. Coordinates came from an offline zip-code database, not Google Maps: the proxy this session runs behind does not reach the Places API, and the mills are in towns small enough that a zip centroid is within a few miles anyway.</p>
+<div class="tblwrap"><table class="rec">
+<tr><th>Check</th><th class="n">Model</th><th class="n">Reported</th><th>Source</th></tr>
+<tr><td>US containerboard capacity, end of 2024</td><td class="n">{{cap_us_2024}} Mt</td><td class="n">~41.4 Mt</td><td>AF&amp;PA capacity survey: 42.3 Mt record in 2021, then −0.6%, −0.7%, −0.9%</td></tr>
+<tr><td>US capacity, October 2026 (open mills)</td><td class="n">{{cap_us_2026}} Mt</td><td class="n">~37.5–38 Mt</td><td>AF&amp;PA −5.1% in 2025; Fastmarkets: 3.9 Mt retired Feb 2025–Mar 2026</td></tr>
+<tr><td>International Paper, US, end of 2024</td><td class="n">{{ip_2024}} Mt</td><td class="n">12.98 Mt</td><td>IP 10-K FY2024, Appendix II</td></tr>
+<tr><td>Smurfit Westrock, US mills</td><td class="n">{{sw_2026}} Mt</td><td class="n">7.23 Mt</td><td>SW 10-K mill table (used directly)</td></tr>
+<tr><td>Packaging Corp of America, 2026</td><td class="n">{{pca_2026}} Mt</td><td class="n">5.8 Mt</td><td>PCA 10-K FY2025 (358 BSF), ten mills</td></tr>
+<tr><td>Capacity closed 2025–2026</td><td class="n">{{closed_2526}} Mt</td><td class="n">~3.9 Mt</td><td>Fastmarkets RISI count of permanent retirements</td></tr>
+<tr><td>Board shipped by US mills, 2024 scenario</td><td class="n">{{ship_2024}} Mt</td><td class="n">37.7 Mt produced</td><td>AF&amp;PA 2024 production (+5% on 2023); 2025 was 36.1 Mt</td></tr>
+<tr><td>Box shipments</td><td class="n">{{demand_2024}} Mt of board</td><td class="n">381 BSF</td><td>Fibre Box Association 2024; ~0.08 Mt of board per BSF</td></tr>
+</table></div>
+<p>Demand is the weakest input and it is worth being plain about it. There is no public list of the ~1,150 US box plants with their tonnage. The model spreads {{demand_2026}} million tons of board (2024: {{demand_2024}}) over counties in proportion to population, tilted toward states with more manufacturing employment, then rolls small counties into the nearest of {{n_nodes}} demand points. Two thirds of that board is linerboard and one third medium. Exports of {{exports_2026}} million tons leave through twelve gateways, with Laredo (rail and truck to Mexico), Houston, New Orleans and Savannah carrying most of it. Canadian mills get 35% of their capacity to sell south, which is about what the 1.4 million tons of 2024 imports implies. Mexican mills are on the list but out of the model.</p>
+
+<h2>The model, and why it is Lecture 7</h2>
+<p>Each mill is a source with a capacity. Each demand point wants a fixed number of tons of liner and of medium. Moving a ton costs freight, which rises with distance but switches from truck to rail somewhere around 450 road miles. Minimize freight subject to meeting demand without exceeding any mill: that is a transportation problem, the special case of min-cost flow where every arc runs from a source to a sink. Two things about this industry break the plain version, and both are fixed by adding nodes rather than by changing the algorithm.</p>
+<p>First, the big companies are integrated. International Paper's mills exist to feed International Paper's box plants, so a ton of IP board does not go to the nearest plant, it goes to the nearest IP plant. The model gives each integrated owner its own copy of every demand point, holding that owner's share of the local market (IP 31%, Smurfit Westrock 20%, PCA 15.5%, Georgia-Pacific 9.5%, Pratt 6%, Green Bay 3%, Cascades 2%; the remaining 13% is independent converters). Only an owner's own mills can serve its copies. An arc from the open-market node into each owner copy, priced at $150 a ton, lets an owner buy outside when it is short; that is roughly the margin it gives up by doing so, and the solver uses it rarely. Second, mills make specific grades. Splitting each mill into a liner node and a medium node behind one capacity arc keeps kraft liner mills out of the medium market without a second commodity. With those two expansions it is one min-cost flow on one network, and HiGHS solves it as an LP in a few seconds.</p>
+<div class="math">
+<span class="c"># sets: mills i (capacity c_i, grades), demand points j, grades g ∈ {liner, medium}, owners k, ports p</span><br>
+min  Σ f_ij (x_ijg + y_ijg)  +  Σ f_ip z_ip  +  150 Σ v_kjg  +  400 Σ u_jg<br>
+s.t. Σ_{j,g} (x_ijg + y_ijg) + Σ_p z_ip  ≤  c_i a_i          <span class="c"># mill capacity, a_i = availability this month</span><br>
+     Σ_{i owned by k} x_ijg + v_kjg  =  s_k φ_g D_j           <span class="c"># owner k's box plants at j</span><br>
+     Σ_i y_ijg − Σ_k v_kjg + u_jg  =  s_open φ_g D_j         <span class="c"># open market at j</span><br>
+     Σ_i z_ip  =  E_p                                        <span class="c"># exports through gateway p (kraft mills only)</span><br>
+     f(d) = min(8 + 0.125 d, 35 + 0.065 d) $/ton,  d = 1.2 × great-circle miles<br>
+<span class="c"># October 2026 instance: {{n_vars}} variables, {{n_rows}} constraints, {{solve_s}} s with HiGHS. 48 scenarios on this page took about four minutes.</span>
+</div>
+<p>The duals come for free and they are the most useful part. The multiplier on a mill's capacity constraint is what one more ton of that mill would save the network in freight; the multiplier on a demand constraint is the delivered cost of the marginal ton in that county. Both are layers on the map.</p>
+
+<h2>What the solution says</h2>
+<p>The October 2026 network moves {{ship_2026}} million tons of board to US box plants and {{exports_2026}} million tons to the gateways, at an average haul of {{haul_2026}} road miles and about ${{frt_2026}} a ton of freight. Against a 42-lb kraft liner price near $1,000 a ton (Fastmarkets, May 2026), freight is {{frt_pct}}% of the delivered value, which is why the industry is organized around it. {{rail_2026}} of the tonnage goes by rail, almost all of it from the Gulf and the Southeast, where the kraft mills sit next to the pine, to the Midwest and the West, where much of the demand is.</p>
+<div class="viz"><h4 style="font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:0 0 6px;font-weight:500">Board moved by distance band, October 2026 (Mt)</h4><div id="haul"></div><div class="legend"><span><i style="background:var(--s1)"></i>truck</span><span><i style="background:var(--s2)"></i>rail</span></div></div>
+<p>The integration rates fall out of the flows and they line up with what the companies disclose. IP has said for years that about 80% of its North American containerboard goes to its own box plants; the model has {{ip_int}}% internal, {{ip_exp}}% exported, the rest sold. WestRock was described before the merger as about 23% long on containerboard against its own box plants; the model has Smurfit Westrock {{sw_int}}% internal. PCA is the most integrated of the three and the model agrees.</p>
+<div class="tblwrap"><table class="rec">
+<tr><th>Owner, October 2026</th><th class="n">Shipped</th><th class="n">To own plants</th><th class="n">Sold on market</th><th class="n">Exported</th><th class="n">Bought outside</th><th>Reported</th></tr>
+{{integration_rows}}
+</table></div>
+<p>Turn on <em>color mills by scarcity</em> and the West lights up. The capacity multipliers in California, Oregon and Washington average ${{west_shadow}} a ton against ${{east_shadow}} east of the Rockies: the West Coast has a fraction of the mill capacity its population implies, and every ton that is not made there arrives by rail from a thousand miles away. That is the whole business case for New-Indy's Ontario and Oxnard mills, for PCA keeping Wallula, and for the price premium West Coast box plants pay. Turn on <em>color demand by delivered cost</em> and the same geography shows from the other side: the cheapest board in the country is delivered around {{cheap_nodes}}, the dearest around {{dear_nodes}}.</p>
+
+<h2>Preventive maintenance is a network problem</h2>
+<p>Every containerboard mill takes a planned annual outage, five to ten days for most, two weeks at IP's Riverdale mill, and the industry talks about them as a cost line. PCA guided $1.44 a share of outage expense for 2026, about $130 million, or roughly $22 on every ton it makes; IP's second quarter 2026 outage cost was $127 million, twice a normal quarter, because most of its outages landed in the same half. What nobody prices is the other half of an outage: when a mill is down, its box plants are supplied from farther away, and the freight penalty depends on which other mills are down the same month.</p>
+<p>The model gives each of the {{n_model_2026}} mills one outage, nine days for kraft mills and five for recycled, staggered through spring and fall the way companies actually do it, plus 3% unplanned downtime everywhere and the seasonal shape of box demand (a soft February, a busy October). Then it re-solves the flow for every month.</p>
+<div class="viz two">
+  <div><h4>Capacity offline for planned outages (kt per month, number of mills)</h4><div id="months-off"></div></div>
+  <div><h4>Freight vs the annual-average solution ($M, monthly rate)</h4><div id="months-cost"></div></div>
+</div>
+<p>{{month_text}} The point is not the size of the numbers, which depend on a calendar I made up. The point is that the calendar is a decision, and the flow model prices it. Solve the twelve months once with no outages, read off each mill's capacity multiplier each month, and the cost of taking mill <em>i</em> down in month <em>m</em> is roughly that multiplier times the tons lost. Assigning mills to months to minimize that sum, with no more than {{per_month_cap}} mills down in any month and no more than two of one company's, is an assignment problem, a small integer program here (it is a transportation problem until the per-company limit is added). {{calopt_text}} Which is to say: the outage schedule a planner builds on a whiteboard in January is a min-cost flow wearing a different hat, and the duals from one solve are enough to improve it.</p>
+
+<h2>Which mills matter</h2>
+<p>Knocking out one mill at a time and re-solving ranks the network's dependence on each of its twenty largest. The number is extra freight per year, with that mill's owner buying from the market where its own system cannot reach. Click a bar to see the re-routed map.</p>
+<div class="viz"><div id="ko-chart"></div></div>
+<p>{{ko_text}} The 2025 closures are the real-world version of this experiment. Between the end of 2024 and today the network lost {{closed_2526}} million tons, and the model says the average haul went from {{haul_2024}} to {{haul_2026}} miles and freight per ton from ${{frt_2024}} to ${{frt_2026}}. Put 2024's demand on today's mills, the third scenario button, and {{cf_text}} The companies could close those mills because the demand had left first.</p>
+
+<h2>What this is not</h2>
+<ul>
+<li>It is not a plant list. The box-plant side is a population proxy. The real list of ~1,150 plants, ~500 of them with a corrugator, exists in every mill's shipping system and nowhere public; with it, the demand squares become the actual corrugators and the sheet plants they feed, which is a second tier of the same flow.</li>
+<li>Capacities are public figures of mixed age. The IP mills and PCA's legacy mills carry the most uncertainty; the Smurfit Westrock table is current. The owner-level totals reconcile to the 10-Ks, the mill-level split inside IP could be off by 10% at any one mill.</li>
+<li>Freight is two straight lines. Real lane rates, backhauls, rail car availability and transload economics are more interesting than that, and they are what a freight team actually optimizes.</li>
+<li>There are no swaps, contracts, grade-specific basis weights, trim constraints, or inventories. Integrated producers do swap board to save freight; the $150 outside-purchase arc is the crude version of that.</li>
+<li>Shares by owner are national. In reality PCA is heavier in the Midwest and South, Smurfit Westrock in the Southeast; a state-level plant count by owner would fix this and the 10-K property lists contain it.</li>
+</ul>
+<p>Everything here runs from two CSVs (mills, counties), one Python file for the LP and one for the scenarios, and the page reads a JSON the scenarios write. The data and code are in the repository linked below.</p>
+
+<h3>The Python</h3>
+<p class="small">The core of <code>netmodel.py</code>: variables are created arc by arc, each one adds a coefficient to its mill's capacity row and to one demand row, and HiGHS does the rest.</p>
+<pre><code>{{python_excerpt}}</code></pre>
+
+<h3>Sources</h3>
+<p class="small">{{sources}}</p>
+
+<footer>
+  <span>© 2026 Jason Fetzer</span>
+  <span>{{footer_link}}</span>
+</footer>
