@@ -14,12 +14,13 @@ def main(mills_csv, out_json, demand_2024=34.5e6, exports_2024=4.6e6, demand_202
         allm["closed_year"] = allm.status_note.fillna("").str.extract(r"closed[^0-9]*(20\d\d)")[0].astype(float)
     allm = allm[allm.lat.notna()].reset_index(drop=True)
     allm["gid"] = range(len(allm))
+    model_ok = allm.country.isin(["US", "CA"])          # Mexican mills are listed for context but do not supply the US network
     shares = shares or {"International Paper":0.31,"Smurfit Westrock":0.20,"Packaging Corp of America":0.155,"Georgia-Pacific":0.095,
                         "Pratt Industries":0.06,"Green Bay Packaging":0.03,"Cascades":0.02}
-    fp24 = allm[(allm.status_oct2026=="open") | (allm.closed_year.fillna(0) >= 2025)].reset_index(drop=True).copy()
+    fp24 = allm[model_ok & ((allm.status_oct2026=="open") | (allm.closed_year.fillna(0) >= 2025))].reset_index(drop=True).copy()
     if "capacity_2024" in fp24: fp24["capacity_tons_per_year"] = fp24.capacity_2024.fillna(fp24.capacity_tons_per_year)
     if "owner_2024" in fp24: fp24["owner"] = fp24.owner_2024.fillna(fp24.owner)
-    fp26 = allm[allm.status_oct2026=="open"].reset_index(drop=True)
+    fp26 = allm[model_ok & (allm.status_oct2026=="open")].reset_index(drop=True)
     def pack(res, fp, label, kind, extra=None, base=None):
         M, N, ship, exp = res["mills"], res["nodes"], res["ship"], res["exports"]
         util = np.zeros(len(allm)); shadow = np.zeros(len(allm)); shipped = np.zeros(len(allm))
@@ -64,7 +65,7 @@ def main(mills_csv, out_json, demand_2024=34.5e6, exports_2024=4.6e6, demand_202
     for mo in range(1, 13):
         r = build_and_solve(fp26, nodes, demand_2026*SEASON[mo], shares, exports_2026, availability=np.full(n, 0.97), premium=premium, verbose=False)
         S[mo-1] = r["mills"].capacity_shadow_price.values
-        noout[mo] = dict(freight_usd=r["kpi"]["freight_usd"], avg_haul_miles=r["kpi"]["avg_haul_miles"], unmet_tons=r["kpi"]["unmet_tons"])
+        noout[mo] = dict(freight_usd=r["kpi"]["freight_usd"], objective_usd=r["kpi"]["objective_usd"], avg_haul_miles=r["kpi"]["avg_haul_miles"], unmet_tons=r["kpi"]["unmet_tons"])
     tons_off = fp26.capacity_tons_per_year.values/12.0 * cal.days.values/30.0
     C = S * tons_off[None, :]
     rand_est = float(sum(C[cal.month.values[i]-1, i] for i in range(n)))
@@ -91,7 +92,7 @@ def main(mills_csv, out_json, demand_2024=34.5e6, exports_2024=4.6e6, demand_202
     for mo in range(1, 13):
         for pfx in ("m", "o"):
             scen[f"{pfx}{mo:02d}"]["noout"] = noout[mo]
-            scen[f"{pfx}{mo:02d}"]["outage_penalty_usd"] = round((scen[f"{pfx}{mo:02d}"]["kpi"]["freight_usd"] - noout[mo]["freight_usd"])/12)
+            scen[f"{pfx}{mo:02d}"]["outage_penalty_usd"] = round((scen[f"{pfx}{mo:02d}"]["kpi"]["objective_usd"] - noout[mo]["objective_usd"])/12)   # network cost: freight + outside purchases at $150/t + unmet at $400/t
     rand_actual = float(sum(scen[f"m{mo:02d}"]["outage_penalty_usd"] for mo in range(1, 13)))
     opt_actual = float(sum(scen[f"o{mo:02d}"]["outage_penalty_usd"] for mo in range(1, 13)))
     calendar_opt = dict(random_est=rand_est, opt_est=opt_est, random_actual_annual_penalty=rand_actual, opt_actual_annual_penalty=opt_actual,
@@ -113,6 +114,53 @@ def main(mills_csv, out_json, demand_2024=34.5e6, exports_2024=4.6e6, demand_202
                         unmet=round(r["kpi"]["unmet_tons"]), d_haul=round(r["kpi"]["avg_haul_miles"]-r26["kpi"]["avg_haul_miles"],1),
                         owner_buys=round(r["kpi"]["owner_purchased_from_market_tons"])))
     print(f"knockouts done {time.time()-t0:.0f}s")
+    # ---- unilateral price increases on the open market: who switches?
+    base_y = r26["ship"][r26["ship"].kind == "y"].groupby(["m", "j", "g"]).tons.sum()
+    price_shocks = {}
+    for owner in ["International Paper", "Smurfit Westrock", "Packaging Corp of America", "Georgia-Pacific", "Pratt Industries"]:
+        if not (fp26.owner == owner).any(): continue
+        r = build_and_solve(fp26, nodes, demand_2026, shares, exports_2026, premium=premium, verbose=False, market_surcharge={owner: 70.0})
+        y = r["ship"][r["ship"].kind == "y"].groupby(["m", "j", "g"]).tons.sum()
+        own_m = set(np.where(fp26.owner.values == owner)[0])
+        lost = base_y[[k[0] in own_m for k in base_y.index]]
+        lost_after = y.reindex(lost.index).fillna(0)
+        delta = (lost - lost_after); delta = delta[delta > 1000]
+        calls = []
+        for (mi, j, g), t in delta.sort_values(ascending=False).items():
+            gained = y[[(k[1] == j and k[2] == g and k[0] not in own_m) for k in y.index]]
+            to = gained.sort_values(ascending=False)
+            to_m = int(to.index[0][0]) if len(to) else None
+            calls.append(dict(node=int(j), grade=g, from_mill=int(fp26.gid.values[mi]), to_mill=(int(fp26.gid.values[to_m]) if to_m is not None else None), tons=int(round(t))))
+        scen[f"ps_{owner}"] = pack(r, fp26, f"{owner} raises open-market price $70/t", "shock", base=scen["fp2026"])
+        price_shocks[owner] = dict(base_market_tons=int(round(lost.sum())), market_tons_after=int(round(lost_after.sum())), calls=calls[:400],
+                                   d_cost=round(r["kpi"]["objective_usd"] - r26["kpi"]["objective_usd"]))
+    print(f"price shocks done {time.time()-t0:.0f}s")
+    # ---- prospects: cheapest and second-cheapest supplier by delivered freight for each demand point
+    pr_L = prospects(fp26, nodes, grade="L"); pr_M = prospects(fp26, nodes, grade="M")
+    for lst in (pr_L, pr_M):
+        for p in lst:
+            for k in ("best", "second", "third"): p[k] = int(fp26.gid.values[p[k]])
+    # ---- diesel sensitivity
+    diesel = {}
+    for dz in (3.0, 5.0, 6.2):
+        r = build_and_solve(fp26, nodes, demand_2026, shares, exports_2026, premium=premium, verbose=False, diesel=dz)
+        scen[f"dz{int(dz)}"] = pack(r, fp26, f"Diesel at ${dz:.2f}/gal", "diesel", base=scen["fp2026"], extra=dict(diesel=dz))
+        diesel[str(dz)] = dict(freight_usd=r["kpi"]["freight_usd"], rail_share=r["kpi"]["rail_share"], avg_haul=r["kpi"]["avg_haul_miles"], avg_freight_per_ton=r["kpi"]["avg_freight_per_ton"])
+    diesel["3.75"] = dict(freight_usd=r26["kpi"]["freight_usd"], rail_share=r26["kpi"]["rail_share"], avg_haul=r26["kpi"]["avg_haul_miles"], avg_freight_per_ton=r26["kpi"]["avg_freight_per_ton"])
+    print(f"diesel done {time.time()-t0:.0f}s")
+    # ---- the fiber loop
+    occ = solve_occ(fp26, nodes, r26["nodes"].demand_tons.values*1.03, recovery_rate=0.92, export_tons=8.4e6, utilization=r26["mills"].utilization.values, verbose=True)
+    sinks = [(("mill", int(fp26.gid.values[i])) if kind == "mill" else ("port", i)) for kind, i in occ["sinks"]]
+    occ_out = dict(kpi={k: round(float(v), 3) for k, v in occ["kpi"].items()}, sinks=sinks, ports=[dict(name=r.port, lat=float(r.lat), lon=float(r.lon), share=float(r.share)) for r in OCC_PORTS.itertuples()],
+                   flows=[[int(j), int(k), int(round(t))] for j, k, t in occ["flows"]], supply=[int(round(v)) for v in occ["supply"]], demand=[int(round(v)) for v in occ["demand"]],
+                   surplus=[int(round(v)) for v in occ["surplus"]], county_value=[round(float(v), 1) for v in occ["county_value"]])
+    # ---- closure backtest: 2024 footprint facing 2026 demand; who does the LP leave idle?
+    rbt = build_and_solve(fp24, nodes, demand_2026, shares, exports_2026, premium=premium, verbose=False)
+    Mb = rbt["mills"]
+    bt = [dict(mill=int(fp24.gid.values[i]), name=Mb.mill_name.values[i], owner=Mb.owner.values[i], st=Mb.state.values[i], cap=int(Mb.capacity_tons_per_year.values[i]),
+               utilization=round(float(Mb.utilization.values[i]), 3), shadow=round(float(Mb.capacity_shadow_price.values[i]), 1),
+               closed_2025_26=bool(allm.loc[allm.gid == fp24.gid.values[i], "status_oct2026"].iloc[0] == "closed")) for i in range(len(fp24))]
+    print(f"backtest done {time.time()-t0:.0f}s")
     out = dict(
         generated=time.strftime("%Y-%m-%d"),
         params=dict(premium=premium, freight=FREIGHT, demand_2024=demand_2024, exports_2024=exports_2024, demand_2026=demand_2026, exports_2026=exports_2026, shares=shares, season=SEASON),
@@ -122,7 +170,7 @@ def main(mills_csv, out_json, demand_2024=34.5e6, exports_2024=4.6e6, demand_202
         nodes=[dict(id=str(r.node_id), name=r.name, st=r.st, lat=float(r.lat), lon=float(r.lon), pop=int(r.pop_served)) for r in nodes.itertuples()],
         ports=[dict(name=r.port, lat=float(r.lat), lon=float(r.lon), share=float(r.share)) for r in PORTS.itertuples()],
         calendar=[dict(mill=int(fp26.gid.values[i]), month=int(r.month), days=int(r.days)) for i, r in cal.iterrows()], calendar_opt=calendar_opt,
-        knockouts=kos, scenarios=scen)
+        knockouts=kos, price_shocks=price_shocks, prospects=dict(L=pr_L, M=pr_M), diesel=diesel, occ=occ_out, backtest=bt, scenarios=scen)
     json.dump(out, open(out_json, "w"), separators=(",",":"))
     import os; print("wrote", out_json, f"{os.path.getsize(out_json)/1e6:.2f} MB in {time.time()-t0:.0f}s")
     return out

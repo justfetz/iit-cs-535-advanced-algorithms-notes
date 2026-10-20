@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The paper network: every containerboard mill, and who it ships to — Jason Fetzer</title>
+<meta name="description" content="Every US containerboard mill from 10-Ks and press, box demand by county, and a min-cost transshipment model of the flows between them: the 2025 closures, a maintenance-outage calendar priced by the LP&#x27;s duals, and single-mill knockouts, animated with d3.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+<style>
+.page{max-width:860px}
+/* series slots: the validated categorical palette, light and dark steps; sequential ramp in the accent hue */
+:root{--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#6250d6;--s8:#e34948;--other:#8a8a84;--seq-lo:#d8ebe4;--seq-hi:#113f33;--land:#f1f1ec;--border:#d6d6d0}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#e66767;--other:#7a7a74;--seq-lo:#1d3a31;--seq-hi:#a8e6cf;--land:#1b1b1a;--border:#323230}}
+:root[data-theme="dark"]{--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#e66767;--other:#7a7a74;--seq-lo:#1d3a31;--seq-hi:#a8e6cf;--land:#1b1b1a;--border:#323230}
+.viz{border:1px solid var(--rule);border-radius:10px;padding:16px;margin:0 0 24px;background:var(--bg);position:relative}
+.viz svg{display:block;width:100%;height:auto;font-family:var(--mono)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.bar .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-right:2px}
+.bar button,.bar select{font-family:var(--mono);font-size:12px;min-height:36px;padding:0 12px;border:1px solid var(--rule);border-radius:6px;background:var(--code-bg);color:var(--ink);cursor:pointer;max-width:100%}
+.bar select{min-width:0}
+.bar button:hover,.bar select:hover{border-color:var(--accent);color:var(--accent)}
+.bar button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.bar button:focus-visible,.bar select:focus-visible,#legend button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#legend{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 0}
+#legend button{font-family:var(--mono);font-size:11.5px;min-height:32px;padding:0 10px;border:1px solid var(--rule);border-radius:999px;background:none;color:var(--ink-2);cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+#legend button span{color:var(--ink-3)}
+#legend button i{display:inline-block;width:10px;height:10px;border-radius:50%}
+#legend button[aria-pressed="true"]{border-color:var(--accent);color:var(--ink)}
+#stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px 16px;margin:12px 0 0;font-family:var(--mono);font-size:12px}
+#stats .st{display:flex;flex-direction:column;gap:2px;min-width:0;border-top:1px solid var(--rule);padding-top:6px}
+#stats .st span{color:var(--ink-3);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+#stats .st b{font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+#stats .st .d{color:var(--accent);font-weight:400}
+#map{position:relative}
+#map .nation{fill:var(--land);stroke:var(--border);stroke-width:.8}
+#map .mesh{fill:none;stroke:var(--border);stroke-width:.5}
+#map .arc{fill:none;stroke-linecap:round;opacity:.55;pointer-events:none}
+#map .arc.mkt{stroke:var(--ink-3);opacity:.4}
+#map .arc.exp{stroke-dasharray:3 3;opacity:.6}
+#map .arc.hl{opacity:1}
+#map .arc.fade{opacity:.06}
+#map .node{fill:var(--ink-3);opacity:.55}
+#map .node.mc{opacity:.95;stroke:var(--bg);stroke-width:.4}
+#map .mill{stroke-width:1.2;opacity:.92;cursor:pointer}
+#map .mill.off{stroke-dasharray:2 2;opacity:.8}
+#map .mill.dim{opacity:.15}
+#map .port{fill:var(--ink-2);opacity:.85;cursor:pointer}
+#map .labels text{font-size:8.5px;fill:var(--ink-2);paint-order:stroke;stroke:var(--bg);stroke-width:2.5px;pointer-events:none}
+.tip{position:absolute;z-index:3;pointer-events:none;background:var(--bg);color:var(--ink);border:1px solid var(--rule);border-radius:8px;padding:8px 10px;font-family:var(--mono);font-size:11.5px;line-height:1.5;max-width:300px;box-shadow:0 6px 24px rgba(0,0,0,.12)}
+.tip b{font-weight:600}.tip i{color:var(--ink-3);font-style:normal}
+.legend{font-family:var(--mono);font-size:12px;color:var(--ink-3);display:flex;gap:16px;flex-wrap:wrap;margin-top:8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.grid line,.grid path{stroke:var(--rule)}.grid path{display:none}.grid text,.axis text{fill:var(--ink-3);font-size:10.5px}.axis path,.axis line{stroke:var(--rule)}
+.axlab{fill:var(--ink-3);font-size:10.5px}.val{fill:var(--ink-2);font-size:10px;font-variant-numeric:tabular-nums}.lab{fill:var(--ink);font-size:10.5px}
+rect.truck{fill:var(--s1)}rect.rail{fill:var(--s2)}rect.off{fill:var(--other)}rect.cost{fill:var(--s2)}rect.cost.neg{fill:var(--s3)}line.zero{stroke:var(--ink-3);stroke-width:.8}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.two>div{min-width:0}
+.two h4{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:0 0 6px;font-weight:500}
+.rec{width:100%;border-collapse:collapse;font-size:14.5px;margin:0 0 24px}
+.rec th{text-align:left;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);padding:8px 10px 8px 0;border-bottom:1px solid var(--rule);font-weight:500}
+.rec td{padding:9px 10px 9px 0;border-bottom:1px solid var(--rule);vertical-align:top;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.rec td:first-child{color:var(--ink)}
+.rec td.n{text-align:right;font-family:var(--mono);font-size:13px;white-space:nowrap}
+.rec th.n{text-align:right}
+.tblwrap{overflow-x:auto;margin:0 0 24px}
+.tblwrap .rec{margin:0;min-width:520px}
+.math{font-family:var(--mono);font-size:13.5px;line-height:1.7;background:var(--code-bg);border:1px solid var(--rule);border-radius:8px;padding:14px 18px;margin:0 0 20px;overflow-x:auto;color:var(--ink)}
+.math .c{color:var(--ink-3)}
+.small{font-size:14px;color:var(--ink-2)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+@media (max-width:560px){#stats{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<main class="page">
+<nav class="top">
+  <a href="../">← jason fetzer</a>
+  <a href="../#writing">writing</a>
+  <button class="theme" id="theme" type="button" aria-label="Toggle dark mode">
+    <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    theme
+  </button>
+</nav>
+
+<p class="meta">2026-10-20 · network flow · linear programming · python · d3</p>
+<h1>The paper network: 63 mills, 441 box markets, one min-cost flow</h1>
+<p class="lede">A corrugated box starts as rolls of linerboard and medium from a containerboard mill, and there are about 63 of those mills left in the United States. Where they are is public: 10-Ks, closure notices, trade press. Where the boxes get made is roughly where the people and the factories are. The freight between the two decides who ships to whom. Put those three facts into a min-cost transshipment model, the problem from Lecture 7 of CS 535, and you get a map the industry does not publish: the flows. Here it is, with the 2025 closures, a maintenance calendar, and what the network does when a big mill goes dark.</p>
+
+<div class="viz" id="mapviz">
+  <div class="bar" id="scen"><span class="lbl">Scenario</span>
+    <button type="button" data-scen="fp2024" aria-pressed="false">End of 2024</button>
+    <button type="button" data-scen="fp2026" aria-pressed="true">October 2026</button>
+    <button type="button" data-scen="cf2026" aria-pressed="false">2026 mills, 2024 demand</button>
+    <select id="month" aria-label="Maintenance month"><option value="">Maintenance month…</option></select>
+    <select id="ko" aria-label="Knock out a mill"><option value="">Knock out a mill…</option></select>
+  </div>
+  <div class="bar" id="layers"><span class="lbl">Show</span>
+    <button type="button" data-layer="flows" aria-pressed="true">Own-system flows</button>
+    <button type="button" data-layer="market" aria-pressed="true">Open-market flows</button>
+    <button type="button" data-layer="exports" aria-pressed="false">Exports</button>
+    <button type="button" data-layer="demand" aria-pressed="true">Demand points</button>
+    <button type="button" data-layer="shadow" aria-pressed="false">Color mills by scarcity</button>
+    <button type="button" data-layer="mc" aria-pressed="false">Color demand by delivered cost</button>
+  </div>
+  <div id="map"></div>
+  <div id="legend" aria-label="Owners; click to isolate"></div>
+  <div id="stats"></div>
+</div>
+<p class="small">Circles are mills, sized by annual capacity and colored by owner; hollow dashed circles are mills that have closed. Squares are demand points: the 441 largest counties, each carrying the smaller counties around it, sized by the tons of board their box plants use in a year. Lines are the solver's flows, colored when a mill feeds its own company's box plants and gray when the board is sold on the open market. Hover a mill for its utilization and the value of one more ton of its capacity; hover a square for who supplies it and what the last ton costs delivered.</p>
+
+<h2>Where the numbers come from</h2>
+<p>No free source lists every containerboard mill with its tonnage, so the table was assembled the way an analyst would: company by company. International Paper's 10-K gives one number for US containerboard capacity, 12,984 thousand tons at the end of 2024, and names the mills; the per-mill tonnages come from older filings, closure announcements (Orange 800k, Campti 800k, Riceboro 430k, Savannah 1,000k) and local reporting, and they add up to within 1% of the 10-K figure. Smurfit Westrock publishes a mill-by-mill capacity table in its 10-K, which is where its eleven US mills come from. PCA reports 5.8 million tons across ten mills after buying Greif's two in September 2025; the split between them is anchored to earlier filings and scaled. Georgia-Pacific, Pratt, Green Bay Packaging, Cascades, New-Indy, ND Paper, Domtar and a dozen smaller producers come from press releases and trade press, and every row carries a confidence flag. Coordinates came from an offline zip-code database, not Google Maps: the proxy this session runs behind does not reach the Places API, and the mills are in towns small enough that a zip centroid is within a few miles anyway.</p>
+<div class="tblwrap"><table class="rec">
+<tr><th>Check</th><th class="n">Model</th><th class="n">Reported</th><th>Source</th></tr>
+<tr><td>US containerboard capacity, end of 2024</td><td class="n">39.6 Mt</td><td class="n">~41.4 Mt</td><td>AF&amp;PA capacity survey: 42.3 Mt record in 2021, then −0.6%, −0.7%, −0.9%</td></tr>
+<tr><td>US capacity, October 2026 (open mills)</td><td class="n">36.2 Mt</td><td class="n">~37.5–38 Mt</td><td>AF&amp;PA −5.1% in 2025; Fastmarkets: 3.9 Mt retired Feb 2025–Mar 2026</td></tr>
+<tr><td>International Paper, US, end of 2024</td><td class="n">12.85 Mt</td><td class="n">12.98 Mt</td><td>IP 10-K FY2024, Appendix II</td></tr>
+<tr><td>Smurfit Westrock, US mills</td><td class="n">7.23 Mt</td><td class="n">7.23 Mt</td><td>SW 10-K mill table (used directly)</td></tr>
+<tr><td>Packaging Corp of America, 2026</td><td class="n">5.59 Mt</td><td class="n">5.8 Mt</td><td>PCA 10-K FY2025 (358 BSF), ten mills</td></tr>
+<tr><td>Capacity closed 2025–2026</td><td class="n">3.7 Mt</td><td class="n">~3.9 Mt</td><td>Fastmarkets RISI count of permanent retirements</td></tr>
+<tr><td>Board shipped by US mills, 2024 scenario</td><td class="n">38.7 Mt</td><td class="n">37.7 Mt produced</td><td>AF&amp;PA 2024 production (+5% on 2023); 2025 was 36.1 Mt</td></tr>
+<tr><td>Box shipments</td><td class="n">34.5 Mt of board</td><td class="n">381 BSF</td><td>Fibre Box Association 2024; ~0.08 Mt of board per BSF</td></tr>
+</table></div>
+<p>Demand is the weakest input and it is worth being plain about it. There is no public list of the ~1,150 US box plants with their tonnage. The model spreads 32.2 million tons of board (2024: 34.5) over counties in proportion to population, tilted toward states with more manufacturing employment, then rolls small counties into the nearest of 441 demand points. Two thirds of that board is linerboard and one third medium. Exports of 3.6 million tons leave through twelve gateways, with Laredo (rail and truck to Mexico), Houston, New Orleans and Savannah carrying most of it. Canadian mills get 35% of their capacity to sell south, which is about what the 1.4 million tons of 2024 imports implies. Mexican mills are on the list but out of the model.</p>
+
+<h2>The model, and why it is Lecture 7</h2>
+<p>Each mill is a source with a capacity. Each demand point wants a fixed number of tons of liner and of medium. Moving a ton costs freight, which rises with distance but switches from truck to rail somewhere around 450 road miles. Minimize freight subject to meeting demand without exceeding any mill: that is a transportation problem, the special case of min-cost flow where every arc runs from a source to a sink. Two things about this industry break the plain version, and both are fixed by adding nodes rather than by changing the algorithm.</p>
+<p>First, the big companies are integrated. International Paper's mills exist to feed International Paper's box plants, so a ton of IP board does not go to the nearest plant, it goes to the nearest IP plant. The model gives each integrated owner its own copy of every demand point, holding that owner's share of the local market (IP 31%, Smurfit Westrock 20%, PCA 15.5%, Georgia-Pacific 9.5%, Pratt 6%, Green Bay 3%, Cascades 2%; the remaining 13% is independent converters). Only an owner's own mills can serve its copies. An arc from the open-market node into each owner copy, priced at $150 a ton, lets an owner buy outside when it is short; that is roughly the margin it gives up by doing so, and the solver uses it rarely. Second, mills make specific grades. Splitting each mill into a liner node and a medium node behind one capacity arc keeps kraft liner mills out of the medium market without a second commodity. With those two expansions it is one min-cost flow on one network, and HiGHS solves it as an LP in a few seconds.</p>
+<div class="math">
+<span class="c"># sets: mills i (capacity c_i, grades), demand points j, grades g ∈ {liner, medium}, owners k, ports p</span><br>
+min  Σ f_ij (x_ijg + y_ijg)  +  Σ f_ip z_ip  +  150 Σ v_kjg  +  400 Σ u_jg<br>
+s.t. Σ_{j,g} (x_ijg + y_ijg) + Σ_p z_ip  ≤  c_i a_i          <span class="c"># mill capacity, a_i = availability this month</span><br>
+     Σ_{i owned by k} x_ijg + v_kjg  =  s_k φ_g D_j           <span class="c"># owner k's box plants at j</span><br>
+     Σ_i y_ijg − Σ_k v_kjg + u_jg  =  s_open φ_g D_j         <span class="c"># open market at j</span><br>
+     Σ_i z_ip  =  E_p                                        <span class="c"># exports through gateway p (kraft mills only)</span><br>
+     f(d) = min(8 + 0.125 d, 35 + 0.065 d) $/ton,  d = 1.2 × great-circle miles<br>
+<span class="c"># October 2026 instance: 93,423 variables, 7,139 constraints, 2.3 s with HiGHS. 48 scenarios on this page took about four minutes.</span>
+</div>
+<p>The duals come for free and they are the most useful part. The multiplier on a mill's capacity constraint is what one more ton of that mill would save the network in freight; the multiplier on a demand constraint is the delivered cost of the marginal ton in that county. Both are layers on the map.</p>
+
+<h2>What the solution says</h2>
+<p>The October 2026 network moves 35.3 million tons of board to US box plants and 3.6 million tons to the gateways, at an average haul of 568 road miles and about $64 a ton of freight. Against a 42-lb kraft liner price near $1,000 a ton (Fastmarkets, May 2026), freight is 6% of the delivered value, which is why the industry is organized around it. 44% of the tonnage goes by rail, almost all of it from the Gulf and the Southeast, where the kraft mills sit next to the pine, to the Midwest and the West, where much of the demand is.</p>
+<div class="viz"><h4 style="font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:0 0 6px;font-weight:500">Board moved by distance band, October 2026 (Mt)</h4><div id="haul"></div><div class="legend"><span><i style="background:var(--s1)"></i>truck</span><span><i style="background:var(--s2)"></i>rail</span></div></div>
+<p>The integration rates fall out of the flows and they line up with what the companies disclose. IP has said for years that about 80% of its North American containerboard goes to its own box plants; the model has 88% internal, 9% exported, the rest sold. WestRock was described before the merger as about 23% long on containerboard against its own box plants; the model has Smurfit Westrock 87% internal. PCA is the most integrated of the three and the model agrees.</p>
+<div class="tblwrap"><table class="rec">
+<tr><th>Owner, October 2026</th><th class="n">Shipped</th><th class="n">To own plants</th><th class="n">Sold on market</th><th class="n">Exported</th><th class="n">Bought outside</th><th>Reported</th></tr>
+<tr><td>International Paper</td><td class='n'>11.38 Mt</td><td class='n'>88%</td><td class='n'>357 kt</td><td class='n'>1.05 Mt</td><td class='n'>13 kt</td><td>~80% to own plants (10-K)</td></tr>
+<tr><td>Smurfit Westrock</td><td class='n'>7.23 Mt</td><td class='n'>87%</td><td class='n'>91 kt</td><td class='n'>824 kt</td><td class='n'>125 kt</td><td>~81% implied: WestRock was ~23% long on board vs its plants (Fastmarkets)</td></tr>
+<tr><td>Packaging Corp of America</td><td class='n'>5.59 Mt</td><td class='n'>89%</td><td class='n'>105 kt</td><td class='n'>499 kt</td><td class='n'>0 kt</td><td>&quot;majority&quot; in the 10-K; ~96% per secondary sources</td></tr>
+<tr><td>Georgia-Pacific</td><td class='n'>2.73 Mt</td><td class='n'>89%</td><td class='n'>47 kt</td><td class='n'>259 kt</td><td class='n'>636 kt</td><td>not disclosed</td></tr>
+<tr><td>Pratt Industries</td><td class='n'>2.44 Mt</td><td class='n'>79%</td><td class='n'>503 kt</td><td class='n'>0 kt</td><td class='n'>0 kt</td><td>not disclosed</td></tr>
+<tr><td>Cascades</td><td class='n'>1.14 Mt</td><td class='n'>56%</td><td class='n'>496 kt</td><td class='n'>0 kt</td><td class='n'>0 kt</td><td>not disclosed</td></tr>
+<tr><td>Green Bay Packaging</td><td class='n'>1.14 Mt</td><td class='n'>85%</td><td class='n'>140 kt</td><td class='n'>29 kt</td><td class='n'>0 kt</td><td>not disclosed</td></tr>
+</table></div>
+<p>Turn on <em>color mills by scarcity</em> and the West lights up. The capacity multipliers in California, Oregon and Washington average $96 a ton against $39 east of the Rockies: the West Coast has a fraction of the mill capacity its population implies, and every ton that is not made there arrives by rail from a thousand miles away. That is the whole business case for New-Indy's Ontario and Oxnard mills, for PCA keeping Wallula, and for the price premium West Coast box plants pay. Turn on <em>color demand by delivered cost</em> and the same geography shows from the other side: the cheapest board in the country is delivered around Outagamie, WI, Sullivan, TN, Brown, WI, the dearest around Yolo, CA, Butte, CA, Sonoma, CA.</p>
+
+<h2>Preventive maintenance is a network problem</h2>
+<p>Every containerboard mill takes a planned annual outage, five to ten days for most, two weeks at IP's Riverdale mill, and the industry talks about them as a cost line. PCA guided $1.44 a share of outage expense for 2026, about $130 million, or roughly $22 on every ton it makes; IP's second quarter 2026 outage cost was $127 million, twice a normal quarter, because most of its outages landed in the same half. What nobody prices is the other half of an outage: when a mill is down, its box plants are supplied from farther away, and the freight penalty depends on which other mills are down the same month.</p>
+<p>The model gives each of the 71 mills one outage, nine days for kraft mills and five for recycled, staggered through spring and fall the way companies actually do it, plus 3% unplanned downtime everywhere and the seasonal shape of box demand (a soft February, a busy October). Then it re-solves the flow for every month.</p>
+<div class="viz two">
+  <div><h4>Capacity offline for planned outages (kt per month, number of mills)</h4><div id="months-off"></div></div>
+  <div><h4>Network cost of that month's outages ($M, monthly rate)</h4><div id="months-cost"></div></div>
+</div>
+<p>In this calendar the costliest month is September, with 16 mills down and 188 kt of capacity offline: freight runs $73M above what the same month would cost with every mill running, and 2.17 Mt of demand cannot be served at all. The cheapest outage month is January at $0M, with 0 mills out and soft demand. The point is not the size of the numbers, which depend on a calendar I made up. The point is that the calendar is a decision, and the flow model prices it. Solve the twelve months once with no outages, read off each mill's capacity multiplier each month, and the cost of taking mill <em>i</em> down in month <em>m</em> is roughly that multiplier times the tons lost. Assigning mills to months to minimize that sum, with no more than 9 mills down in any month and no more than two of one company's, is an assignment problem, a small integer program here (it is a transportation problem until the per-company limit is added). On the dual-price estimate, the staggered calendar costs $208M a year in extra freight and the assignment's calendar $50M. Re-solving the twelve months with the optimized calendar confirms the direction: the actual freight penalty falls from $269M to $122M a year, with the same 71 outages of the same length. Which is to say: the outage schedule a planner builds on a whiteboard in January is a min-cost flow wearing a different hat, and the duals from one solve are enough to improve it.</p>
+
+<h2>Which mills matter</h2>
+<p>Knocking out one mill at a time and re-solving ranks the network's dependence on each of its twenty largest. The number is extra freight per year, with that mill's owner buying from the market where its own system cannot reach. Click a bar to see the re-routed map.</p>
+<div class="viz"><div id="ko-chart"></div></div>
+<p>Losing Cedar River, IA (International Paper, 1.02 Mt) would cost the network $41M a year in freight; Toledo, OR $40M; Hodge, LA $32M. The ranking is not the capacity ranking: a mill matters in proportion to how far its tons would have to come from otherwise, which is why the West Coast mills punch above their tonnage. Without Valliant 131 kt of demand goes unserved; without Mansfield 201 kt of demand goes unserved. The 2025 closures are the real-world version of this experiment. Between the end of 2024 and today the network lost 3.7 million tons, and the model says the average haul went from 575 to 568 miles and freight per ton from $65 to $64. Put 2024's demand on today's mills, the third scenario button, and the solver cannot place 2.10 Mt of that demand anywhere, the average haul rises to 513 miles and freight to $60 a ton. The companies could close those mills because the demand had left first.</p>
+
+<h2>What this is not</h2>
+<ul>
+<li>It is not a plant list. The box-plant side is a population proxy. The real list of ~1,150 plants, ~500 of them with a corrugator, exists in every mill's shipping system and nowhere public; with it, the demand squares become the actual corrugators and the sheet plants they feed, which is a second tier of the same flow.</li>
+<li>Capacities are public figures of mixed age. The IP mills and PCA's legacy mills carry the most uncertainty; the Smurfit Westrock table is current. The owner-level totals reconcile to the 10-Ks, the mill-level split inside IP could be off by 10% at any one mill.</li>
+<li>Freight is two straight lines. Real lane rates, backhauls, rail car availability and transload economics are more interesting than that, and they are what a freight team actually optimizes.</li>
+<li>There are no swaps, contracts, grade-specific basis weights, trim constraints, or inventories. Integrated producers do swap board to save freight; the $150 outside-purchase arc is the crude version of that.</li>
+<li>Shares by owner are national. In reality PCA is heavier in the Midwest and South, Smurfit Westrock in the Southeast; a state-level plant count by owner would fix this and the 10-K property lists contain it.</li>
+</ul>
+<p>Everything here runs from two CSVs (mills, counties), one Python file for the LP and one for the scenarios, and the page reads a JSON the scenarios write. The data and code are in the repository linked below.</p>
+
+<h3>The Python</h3>
+<p class="small">The core of <code>netmodel.py</code>: variables are created arc by arc, each one adds a coefficient to its mill's capacity row and to one demand row, and HiGHS does the rest.</p>
+<pre><code>owners = [k for k in owner_shares if (M.owner==k).any()]
+s_open = 1.0 - sum(owner_shares[k] for k in owners)
+grades = [(&quot;L&quot;, grade_split[0], liner_ok), (&quot;M&quot;, grade_split[1], medium_ok)]
+# ---- variable bookkeeping
+cols = []  # (kind, k, m, j, g) ; kind in x,y,v,z,u
+c_obj = []
+rows_cap, rows_own, rows_open, rows_exp = [], {}, {}, []
+A_r, A_c, A_v = [], [], []
+def addvar(kind, k, m, j, g, c):
+    cols.append((kind, k, m, j, g)); c_obj.append(c); return len(cols)-1
+# constraint indices
+cap_row = {m: m for m in range(nM)}
+nrow = nM
+own_row = {}
+for k in owners:
+    for j in range(J):
+        for gi,(g,_,_) in enumerate(grades):
+            own_row[(k,j,g)] = nrow; nrow += 1
+open_row = {}
+for j in range(J):
+    for g,_,_ in grades:
+        open_row[(j,g)] = nrow; nrow += 1
+exp_row = {p: nrow+p for p in range(len(PORTS))}; nrow += len(PORTS)
+def coef(r, cidx, v): A_r.append(r); A_c.append(cidx); A_v.append(v)
+owner_of = M.owner.values
+for m in range(nM):
+    if cap[m] &lt;= 0: continue
+    for g, phi, ok in grades:
+        if not ok[m]: continue
+        for j in range(J):
+            # open-market arc
+            ci = addvar(&quot;y&quot;, None, m, j, g, cost[m,j] + surcharge[m]); coef(cap_row[m], ci, 1); coef(open_row[(j,g)], ci, 1)
+            k = owner_of[m]
+            if k in owner_shares and k in owners:
+                ci = addvar(&quot;x&quot;, k, m, j, g, cost[m,j]); coef(cap_row[m], ci, 1); coef(own_row[(k,j,g)], ci, 1)
+    if kraft[m]:
+        for p in range(len(PORTS)):
+            ci = addvar(&quot;z&quot;, None, m, None, p, pcost[m,p]); coef(cap_row[m], ci, 1); coef(exp_row[p], ci, 1)
+for k in owners:
+    for j in range(J):
+        for g,_,_ in grades:
+            ci = addvar(&quot;v&quot;, k, None, j, g, premium); coef(own_row[(k,j,g)], ci, 1); coef(open_row[(j,g)], ci, -1)
+for j in range(J):
+    for g,_,_ in grades:
+        ci = addvar(&quot;u&quot;, None, None, j, g, unmet_penalty); coef(open_row[(j,g)], ci, 1)
+nvar = len(cols)
+A = coo_matrix((A_v, (A_r, A_c)), shape=(nrow, nvar)).tocsr()
+# split into inequality (capacity rows) and equality rows
+A_ub = A[:nM]; b_ub = cap
+A_eq = A[nM:]
+b_eq = np.zeros(nrow-nM)
+for k in owners:
+    for j in range(J):
+        for g, phi, _ in grades:
+            b_eq[own_row[(k,j,g)]-nM] = owner_shares[k]*phi*D[j]
+for j in range(J):
+    for g, phi, _ in grades:
+        b_eq[open_row[(j,g)]-nM] = s_open*phi*D[j]
+for p in range(len(PORTS)):
+    b_eq[exp_row[p]-nM] = export_tons*PORTS.share.values[p]
+res = linprog(np.array(c_obj), A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, bounds=(0,None), method=&quot;highs&quot;)</code></pre>
+
+<h3>Sources</h3>
+<p class="small"><a href="https://www.sec.gov/Archives/edgar/data/51434/000005143425000013/ip-20241231.htm">IP 10-K FY2024</a> · <a href="https://www.sec.gov/Archives/edgar/data/2005951/000200595125000005/smur-20241231.htm">Smurfit Westrock 10-K FY2024</a> · <a href="https://www.sec.gov/Archives/edgar/data/75677/000119312526074129/pkg-20251231.htm">PCA 10-K FY2025</a> · <a href="https://www.packagingdive.com/news/afpa-capacity-data-2025-production-decline-containerboard/821910/">AF&amp;PA 2025 capacity survey (Packaging Dive)</a> · <a href="https://www.fastmarkets.com/insights/north-american-containerboard-market-capacity-cuts/">Fastmarkets on 2025–26 capacity cuts</a> · <a href="https://www.packagingdive.com/news/international-paper-two-mill-closures-riceboro-savannah-georgia-layoffs/758254/">IP Savannah and Riceboro closures</a> · <a href="https://www.recyclingtoday.com/news/georgia-pacific-mill-closing-cedar-springs-containerboard-cardboard-recycling/">GP Cedar Springs closure</a> · <a href="https://ir.packagingcorp.com/news-releases/news-release-details/packaging-corporation-america-announces-agreement-purchase-greif">PCA buys Greif containerboard</a> · <a href="https://www.fibrebox.org/the-corrugated-industry">Fibre Box Association</a> · <a href="https://now.aiccbox.org/a-look-at-the-evolution-of-box-plants-1/">AICC on the number of box plants</a> · <a href="https://www.recyclingtoday.com/article/what-a-difference-a-year-makes-for-north-american-paper-capacity/">Recycling Today on capacity shares</a> · <a href="https://www.fool.com/earnings/call-transcripts/2026/04/23/packaging-corp-pkg-q1-2026-earnings-transcript/">PCA Q1 2026 call (outage plan)</a> · <a href="https://github.com/topojson/us-atlas">us-atlas</a> · <a href="https://github.com/CSSEGISandData/COVID-19">JHU county population table</a> · <a href="https://pypi.org/project/zipcodes/">zipcodes (PyPI)</a> · Freight parameters, demand allocation, export gateway shares, owner shares and the outage calendar are the author's assumptions; see the notes in the repository.</p>
+
+<footer>
+  <span>© 2026 Jason Fetzer</span>
+  <span><a href="https://justfetz.github.io">justfetz.github.io</a></span>
+</footer>
+
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="../assets/viz.js"></script>
+<script src="../assets/theme.js"></script>
+<script src="../models/paper-network/data.js"></script>
+<script>
+/* The Paper Network: mills -> box-plant demand, one min-cost flow per scenario. Needs window.PN_DATA and window.PN_BASEMAP, d3 v7. */
+(function () {
+  var D = window.PN_DATA, BM = window.PN_BASEMAP;
+  var fmtT = d3.format(",.0f"), fmtP = d3.format(".0%"), fmt1 = d3.format(".1f");
+  var kt = function (v) { return v >= 950000 ? (v / 1e6).toFixed(2) + " Mt" : Math.round(v / 1e3) + " kt"; };
+  var musd = function (v) { return "$" + (v / 1e6).toFixed(0) + "M"; };
+  var css = function (n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); };
+  var proj = d3.geoConicEqualArea().parallels([29.5, 45.5]).rotate([96, 0]).center([-0.6, 38.7]).scale(1300).translate([487.5, 305]);
+  D.mills.forEach(function (m) { var p = proj([m.lon, m.lat]); m.x = p[0]; m.y = p[1]; });
+  D.nodes.forEach(function (n, i) { var p = proj([n.lon, n.lat]); n.x = p[0]; n.y = p[1]; n.i = i; });
+  D.ports.forEach(function (p) { var q = proj([p.lon, p.lat]); p.x = q[0]; p.y = q[1]; });
+  var OWNERS = D.owner_order;
+  var byId = {}; D.mills.forEach(function (m) { byId[m.id] = m; });
+  function ownerVar(o) { var i = OWNERS.indexOf(o); return i >= 0 && i < 8 ? "var(--s" + (i + 1) + ")" : "var(--other)"; }
+  function ownerHex(o) { var i = OWNERS.indexOf(o); return i >= 0 && i < 8 ? css("--s" + (i + 1)) : css("--other"); }
+  var GRADE = { kraft_linerboard: "kraft liner", recycled_linerboard: "recycled liner", white_top_linerboard: "white-top liner", semichem_medium: "semichem medium", recycled_medium: "recycled medium" };
+  function grades(g) { return String(g || "").split(/[;|]/).filter(Boolean).map(function (x) { return GRADE[x] || x; }).join(", "); }
+
+  /* ---------- scenario access ---------- */
+  var state = { scen: "fp2026", flows: true, market: true, exports: false, demand: true, millColor: "owner", nodeColor: "none", isolate: null };
+  function scen() { return D.scenarios[state.scen]; }
+  function arcsOf(key) {
+    var s = D.scenarios[key];
+    if (!s.delta_of) return s.arcs;
+    var map = new Map(D.scenarios[s.delta_of].arcs.map(function (a) { return [a[0] + "|" + a[1] + "|" + a[3], a]; }));
+    s.arcs.forEach(function (a) { var k = a[0] + "|" + a[1] + "|" + a[3]; if (a[2] === 0) map.delete(k); else map.set(k, a); });
+    return Array.from(map.values());
+  }
+  function ownerIn(m) { return state.scen === "fp2024" ? m.owner_2024 : m.owner; }
+  function capIn(m) { return state.scen === "fp2024" ? m.cap_2024 : m.cap; }
+  var cache = {};
+  function derived(key) {
+    if (cache[key]) return cache[key];
+    var s = D.scenarios[key], arcs = arcsOf(key), byMill = {}, byNode = {};
+    arcs.forEach(function (a) { (byMill[a[0]] = byMill[a[0]] || []).push(a); (byNode[a[1]] = byNode[a[1]] || []).push(a); });
+    var byPort = {}; s.exports.forEach(function (e) { (byPort[e[1]] = byPort[e[1]] || []).push(e); });
+    var active = {}; s.active.forEach(function (g) { active[g] = true; });
+    return (cache[key] = { arcs: arcs, byMill: byMill, byNode: byNode, byPort: byPort, active: active });
+  }
+
+  /* ---------- map ---------- */
+  var W = 975, H = 610;
+  var root = d3.select("#map");
+  var svg = root.append("svg").attr("viewBox", "0 0 " + W + " " + H).attr("role", "img").attr("aria-label", "Map of US containerboard mills, box-plant demand and modeled flows");
+  var gBase = svg.append("g").attr("class", "base"), gArcs = svg.append("g").attr("class", "arcs"), gExp = svg.append("g").attr("class", "exp"),
+      gNodes = svg.append("g").attr("class", "nodes"), gPorts = svg.append("g").attr("class", "ports"), gMills = svg.append("g").attr("class", "mills"), gLab = svg.append("g").attr("class", "labels");
+  gBase.append("path").attr("d", BM.nation).attr("class", "nation");
+  gBase.append("path").attr("d", BM.mesh).attr("class", "mesh");
+  var tip = root.append("div").attr("class", "tip").style("display", "none");
+  function showTip(ev, html) {
+    var r = root.node().getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+    tip.html(html).style("display", "block");
+    var tw = tip.node().offsetWidth, th = tip.node().offsetHeight;
+    tip.style("left", Math.max(4, Math.min(r.width - tw - 4, x + 14)) + "px").style("top", (y - th - 12 < 4 ? y + 16 : y - th - 12) + "px");
+  }
+  function hideTip() { tip.style("display", "none"); }
+  function arcPath(a, b) {
+    var dx = b.x - a.x, dy = b.y - a.y, k = 0.16;
+    return "M" + a.x + "," + a.y + "Q" + ((a.x + b.x) / 2 - dy * k) + "," + ((a.y + b.y) / 2 + dx * k) + " " + b.x + "," + b.y;
+  }
+  var rMill = function (cap) { return Math.max(2.4, Math.sqrt(cap / 1e6) * 9); };
+  var sNode = function (t) { return Math.max(1.6, Math.sqrt(t / 1e6) * 7); };
+  var wArc = function (t) { return Math.max(0.35, Math.sqrt(t / 1e6) * 6); };
+
+  function renderMap() {
+    var s = scen(), dv = derived(state.scen), iso = state.isolate;
+    var seqLo = css("--seq-lo"), seqHi = css("--seq-hi");
+    var shadowScale = d3.scaleSequential(d3.interpolateLab(seqLo, seqHi)).domain([0, d3.quantile(s.shadow.filter(function (v) { return v > 0; }).sort(d3.ascending), 0.95) || 1]);
+    var mcScale = d3.scaleSequential(d3.interpolateLab(seqLo, seqHi)).domain([d3.min(s.node_mc), d3.quantile(s.node_mc.slice().sort(d3.ascending), 0.95)]);
+    var visibleArcs = (state.flows ? dv.arcs : []).filter(function (a) { return (a[3] === 1 || state.market) && (!iso || ownerIn(byId[a[0]]) === iso); });
+    visibleArcs.sort(function (a, b) { return b[2] - a[2]; });
+    var arcSel = gArcs.selectAll("path").data(visibleArcs, function (a) { return a[0] + "|" + a[1] + "|" + a[3]; });
+    arcSel.exit().remove();
+    arcSel.enter().append("path").merge(arcSel)
+      .attr("d", function (a) { return arcPath(byId[a[0]], D.nodes[a[1]]); })
+      .attr("class", function (a) { return a[3] ? "arc own" : "arc mkt"; })
+      .style("stroke", function (a) { return a[3] ? ownerVar(ownerIn(byId[a[0]])) : null; })
+      .style("stroke-width", function (a) { return wArc(a[2]); });
+    // exports
+    var ex = state.exports ? s.exports.filter(function (e) { return !iso || ownerIn(byId[e[0]]) === iso; }) : [];
+    var exSel = gExp.selectAll("path").data(ex, function (e) { return e[0] + "|" + e[1]; });
+    exSel.exit().remove();
+    exSel.enter().append("path").merge(exSel).attr("class", "arc exp").attr("d", function (e) { return arcPath(byId[e[0]], D.ports[e[1]]); })
+      .style("stroke", function (e) { return ownerVar(ownerIn(byId[e[0]])); }).style("stroke-width", function (e) { return wArc(e[2]); });
+    var portSel = gPorts.selectAll("path").data(state.exports ? D.ports : [], function (p) { return p.name; });
+    portSel.exit().remove();
+    portSel.enter().append("path").attr("class", "port").merge(portSel)
+      .attr("d", function (p) { var t = (dv.byPort[D.ports.indexOf(p)] || []).reduce(function (a, e) { return a + e[2]; }, 0), r = Math.max(3, Math.sqrt(t / 1e6) * 9); return "M" + p.x + "," + (p.y - r) + "L" + (p.x + r) + "," + (p.y + r) + "L" + (p.x - r) + "," + (p.y + r) + "Z"; })
+      .on("mousemove", function (ev, p) { var i = D.ports.indexOf(p), list = (dv.byPort[i] || []).slice().sort(function (a, b) { return b[2] - a[2]; }), t = list.reduce(function (a, e) { return a + e[2]; }, 0);
+        showTip(ev, "<b>" + p.name + "</b><br>export gateway · " + fmtP(p.share) + " of US export tons<br>" + kt(t) + " through here<br>" + list.slice(0, 3).map(function (e) { return byId[e[0]].name + " " + kt(e[2]); }).join("<br>")); })
+      .on("mouseleave", hideTip);
+    // demand nodes
+    var nodeSel = gNodes.selectAll("rect").data(state.demand ? D.nodes : [], function (n) { return n.id; });
+    nodeSel.exit().remove();
+    nodeSel.enter().append("rect").attr("class", "node").merge(nodeSel)
+      .attr("x", function (n) { return n.x - sNode(s.node_demand[n.i]) / 2; }).attr("y", function (n) { return n.y - sNode(s.node_demand[n.i]) / 2; })
+      .attr("width", function (n) { return sNode(s.node_demand[n.i]); }).attr("height", function (n) { return sNode(s.node_demand[n.i]); })
+      .style("fill", function (n) { return state.nodeColor === "mc" ? mcScale(s.node_mc[n.i]) : null; })
+      .classed("mc", state.nodeColor === "mc")
+      .on("mousemove", function (ev, n) { var list = (dv.byNode[n.i] || []).slice().sort(function (a, b) { return b[2] - a[2]; });
+        showTip(ev, "<b>" + n.name + "</b><br>" + fmtT(n.pop) + " people in the catchment<br>" + kt(s.node_demand[n.i]) + " of board a year · delivered marginal cost $" + Math.round(s.node_mc[n.i]) + "/t<br>" +
+          list.slice(0, 4).map(function (a) { var m = byId[a[0]]; return m.name + ", " + m.st + " (" + ownerIn(m) + (a[3] ? ", own" : ", market") + ") " + kt(a[2]); }).join("<br>")); })
+      .on("mouseleave", hideTip);
+    // mills: active ones solid, closed/knocked-out hollow
+    var mills = D.mills.filter(function (m) { return m.country !== "MX" && (dv.active[m.id] || m.status === "closed" || (s.kind === "knockout" && s.mill === m.id)); });
+    var millSel = gMills.selectAll("circle").data(mills, function (m) { return m.id; });
+    millSel.exit().remove();
+    millSel.enter().append("circle").attr("class", "mill").merge(millSel)
+      .attr("cx", function (m) { return m.x; }).attr("cy", function (m) { return m.y; })
+      .attr("r", function (m) { return rMill(capIn(m)); })
+      .classed("off", function (m) { return !dv.active[m.id] || (s.kind === "knockout" && s.mill === m.id); })
+      .classed("dim", function (m) { return iso && ownerIn(m) !== iso; })
+      .style("fill", function (m) { if (!dv.active[m.id] || (s.kind === "knockout" && s.mill === m.id)) return "none"; return state.millColor === "shadow" ? shadowScale(s.shadow[m.id]) : ownerVar(ownerIn(m)); })
+      .style("stroke", function (m) { return (!dv.active[m.id] || (s.kind === "knockout" && s.mill === m.id)) ? "var(--ink-3)" : (state.millColor === "shadow" ? "var(--bg)" : ownerVar(ownerIn(m))); })
+      .on("mousemove", function (ev, m) {
+        var dests = (dv.byMill[m.id] || []).slice().sort(function (a, b) { return b[2] - a[2]; });
+        var exp = s.exports.filter(function (e) { return e[0] === m.id; }).reduce(function (a, e) { return a + e[2]; }, 0);
+        var off = !dv.active[m.id] || (s.kind === "knockout" && s.mill === m.id);
+        var line1 = off ? (m.status === "closed" ? "closed " + (m.closed_year || "") : "knocked out in this scenario") : "shipping " + kt(s.shipped[m.id]) + " of " + kt(capIn(m)) + " (" + fmtP(s.util[m.id]) + " loaded)";
+        showTip(ev, "<b>" + m.name + ", " + m.st + "</b> · " + ownerIn(m) + "<br>" + grades(m.grades) + " · " + kt(capIn(m)) + "/yr<br>" + line1 +
+          (off ? "" : "<br>marginal value of one more ton: $" + Math.round(s.shadow[m.id]) + "/t" + (exp ? "<br>exports " + kt(exp) : "")) +
+          (dests.length ? "<br>" + dests.slice(0, 3).map(function (a) { return "→ " + D.nodes[a[1]].name + " " + kt(a[2]); }).join("<br>") : "") + (m.note ? "<br><i>" + m.note + "</i>" : ""));
+        gArcs.selectAll("path").classed("hl", function (a) { return a[0] === m.id; }).classed("fade", function (a) { return a[0] !== m.id; });
+      })
+      .on("mouseleave", function () { hideTip(); gArcs.selectAll("path").classed("hl", false).classed("fade", false); });
+    var labs = mills.filter(function (m) { return capIn(m) >= 850000 && dv.active[m.id]; });
+    var labSel = gLab.selectAll("text").data(labs, function (m) { return m.id; });
+    labSel.exit().remove();
+    labSel.enter().append("text").merge(labSel).attr("x", function (m) { return m.x + rMill(capIn(m)) + 2; }).attr("y", function (m) { return m.y + 3; }).text(function (m) { return m.name; });
+    renderStats();
+  }
+
+  /* ---------- stats strip + legend ---------- */
+  function renderStats() {
+    var s = scen(), k = s.kpi, b = D.scenarios.fp2026.kpi, el = d3.select("#stats");
+    var delta = function (v, bv, f, unit) { if (state.scen === "fp2026" || state.scen === "fp2024") return ""; var d = v - bv; return " <span class='d'>(" + (d >= 0 ? "+" : "−") + f(Math.abs(d)) + unit + ")</span>"; };
+    var items = [
+      ["scenario", s.label],
+      ["board shipped", kt(k.tons_shipped_domestic) + delta(k.tons_shipped_domestic, b.tons_shipped_domestic, kt, "")],
+      ["exported", kt(k.tons_exported)],
+      ["average haul", Math.round(k.avg_haul_miles) + " mi" + delta(k.avg_haul_miles, b.avg_haul_miles, function (v) { return Math.round(v); }, " mi")],
+      ["by rail", fmtP(k.rail_share)],
+      ["freight", "$" + fmt1(k.avg_freight_per_ton) + "/t · " + musd(k.freight_usd) + delta(k.freight_usd, b.freight_usd, musd, "")],
+      ["bought outside own system", kt(k.owner_purchased_from_market_tons)],
+      ["unmet", k.unmet_tons > 0 ? kt(k.unmet_tons) : "none"]
+    ];
+    var sel = el.selectAll("div.st").data(items);
+    sel.exit().remove();
+    sel.enter().append("div").attr("class", "st").merge(sel).html(function (d) { return "<span>" + d[0] + "</span><b>" + d[1] + "</b>"; });
+  }
+  function renderLegend() {
+    var caps = {}; D.mills.forEach(function (m) { if (m.country !== "MX" && m.status === "open") caps[m.owner] = (caps[m.owner] || 0) + m.cap; });
+    var rows = OWNERS.slice(0, 8).map(function (o) { return { o: o, cap: caps[o] || 0 }; });
+    var other = OWNERS.slice(8).reduce(function (a, o) { return a + (caps[o] || 0); }, 0);
+    rows.push({ o: "Other", cap: other });
+    var sel = d3.select("#legend").selectAll("button").data(rows);
+    sel.enter().append("button").attr("type", "button").merge(sel)
+      .attr("aria-pressed", function (d) { return state.isolate === d.o ? "true" : "false"; })
+      .html(function (d) { return "<i style='background:" + (d.o === "Other" ? "var(--other)" : ownerVar(d.o)) + "'></i>" + d.o + " <span>" + kt(d.cap) + "</span>"; })
+      .on("click", function (ev, d) { state.isolate = state.isolate === d.o ? null : (d.o === "Other" ? null : d.o); renderLegend(); renderMap(); });
+  }
+
+  /* ---------- controls ---------- */
+  function setScen(key) { state.scen = key; d3.selectAll("#scen button").attr("aria-pressed", function () { return this.dataset.scen === key ? "true" : "false"; }); renderMap(); }
+  d3.selectAll("#scen button").on("click", function () { d3.select("#month").property("value", ""); d3.select("#ko").property("value", ""); setScen(this.dataset.scen); });
+  var monthSel = d3.select("#month");
+  monthSel.selectAll("option.m").data(d3.range(1, 13)).enter().append("option").attr("class", "m").attr("value", function (m) { return "m" + (m < 10 ? "0" + m : m); })
+    .text(function (m) { var s = D.scenarios["m" + (m < 10 ? "0" + m : m)]; return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m - 1] + " · " + s.mills_down.length + " mills in outage · " + kt(s.tons_offline) + " offline"; });
+  monthSel.on("change", function () { if (this.value) { d3.select("#ko").property("value", ""); d3.selectAll("#scen button").attr("aria-pressed", "false"); state.scen = this.value; renderMap(); } });
+  var koSel = d3.select("#ko");
+  koSel.selectAll("option.k").data(D.knockouts.slice().sort(function (a, b) { return b.d_total - a.d_total; })).enter().append("option").attr("class", "k").attr("value", function (k) { return "ko" + k.mill; })
+    .text(function (k) { return k.name + ", " + k.st + " (" + k.owner + ") · +" + musd(k.d_total) + "/yr" + (k.unmet > 0 ? " · " + kt(k.unmet) + " unmet" : ""); });
+  koSel.on("change", function () { if (this.value) { d3.select("#month").property("value", ""); d3.selectAll("#scen button").attr("aria-pressed", "false"); state.scen = this.value; renderMap(); } });
+  d3.selectAll("#layers button").on("click", function () {
+    var k = this.dataset.layer;
+    if (k === "flows" || k === "market" || k === "exports" || k === "demand") state[k] = !state[k];
+    if (k === "shadow") state.millColor = state.millColor === "shadow" ? "owner" : "shadow";
+    if (k === "mc") state.nodeColor = state.nodeColor === "mc" ? "none" : "mc";
+    d3.selectAll("#layers button").attr("aria-pressed", function () { var q = this.dataset.layer; return (q === "shadow" ? state.millColor === "shadow" : q === "mc" ? state.nodeColor === "mc" : state[q]) ? "true" : "false"; });
+    renderMap();
+  });
+
+  /* ---------- charts ---------- */
+  function chartFrame(id, w, h, m) { var s = d3.select(id).append("svg").attr("viewBox", "0 0 " + w + " " + h); return s.append("g").attr("transform", "translate(" + m.l + "," + m.t + ")"); }
+  function drawHaul() {
+    var rows = D.scenarios.fp2026.haul, w = 680, h = 230, m = { l: 44, r: 12, t: 12, b: 34 }, iw = w - m.l - m.r, ih = h - m.t - m.b;
+    var g = chartFrame("#haul", w, h, m);
+    var x = d3.scaleBand().domain(rows.map(function (r) { return r[0]; })).range([0, iw]).padding(0.28);
+    var y = d3.scaleLinear().domain([0, d3.max(rows, function (r) { return r[1] + r[2]; }) * 1.08]).nice().range([ih, 0]);
+    g.append("g").attr("class", "grid").call(d3.axisLeft(y).ticks(4).tickSize(-iw).tickFormat(function (v) { return (v / 1e6).toFixed(0) + " Mt"; }));
+    g.append("g").attr("class", "axis").attr("transform", "translate(0," + ih + ")").call(d3.axisBottom(x).tickSize(0));
+    g.append("text").attr("class", "axlab").attr("x", iw / 2).attr("y", ih + 30).attr("text-anchor", "middle").text("road miles, mill to box plant");
+    var bars = g.selectAll("g.b").data(rows).enter().append("g").attr("class", "b");
+    bars.append("rect").attr("class", "truck").attr("x", function (r) { return x(r[0]); }).attr("width", x.bandwidth()).attr("y", function (r) { return y(r[1]); }).attr("height", function (r) { return ih - y(r[1]); }).attr("rx", 2);
+    bars.append("rect").attr("class", "rail").attr("x", function (r) { return x(r[0]); }).attr("width", x.bandwidth()).attr("y", function (r) { return y(r[1] + r[2]) ; }).attr("height", function (r) { return Math.max(0, y(r[1]) - y(r[1] + r[2]) - 2); }).attr("rx", 2).style("display", function (r) { return r[2] > 0 ? null : "none"; });
+    bars.append("text").attr("class", "val").attr("x", function (r) { return x(r[0]) + x.bandwidth() / 2; }).attr("y", function (r) { return y(r[1] + r[2]) - 5; }).attr("text-anchor", "middle").text(function (r) { return ((r[1] + r[2]) / 1e6).toFixed(1); });
+    bars.on("mousemove", function (ev, r) { showTipAt("#haul", ev, "<b>" + r[0] + " miles</b><br>truck " + kt(r[1]) + "<br>rail " + kt(r[2])); }).on("mouseleave", function () { d3.select("#haul .tip").style("display", "none"); });
+  }
+  function showTipAt(id, ev, html) {
+    var box = d3.select(id); var t = box.select(".tip"); if (t.empty()) t = box.append("div").attr("class", "tip");
+    var r = box.node().getBoundingClientRect(); t.html(html).style("display", "block").style("left", Math.min(r.width - 180, ev.clientX - r.left + 12) + "px").style("top", (ev.clientY - r.top - 40) + "px");
+  }
+  function drawMonths() {
+    var months = d3.range(1, 13).map(function (m) { var k = "m" + (m < 10 ? "0" + m : m), s = D.scenarios[k]; return { m: m, k: k, off: s.tons_offline, down: s.mills_down.length, dfr: s.outage_penalty_usd, unmet: s.kpi.unmet_tons - (s.noout ? s.noout.unmet_tons : 0), season: s.season }; });
+    var w = 680, h = 190, m = { l: 48, r: 12, t: 14, b: 26 }, iw = w - m.l - m.r, ih = h - m.t - m.b, names = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
+    var x = d3.scaleBand().domain(months.map(function (d) { return d.m; })).range([0, iw]).padding(0.3);
+    var g1 = chartFrame("#months-off", w, h, m);
+    var y1 = d3.scaleLinear().domain([0, d3.max(months, function (d) { return d.off; }) * 1.15]).nice().range([ih, 0]);
+    g1.append("g").attr("class", "grid").call(d3.axisLeft(y1).ticks(4).tickSize(-iw).tickFormat(function (v) { return (v / 1e3).toFixed(0) + " kt"; }));
+    g1.append("g").attr("class", "axis").attr("transform", "translate(0," + ih + ")").call(d3.axisBottom(x).tickSize(0).tickFormat(function (d) { return names[d - 1]; }));
+    g1.selectAll("rect").data(months).enter().append("rect").attr("class", "off").attr("x", function (d) { return x(d.m); }).attr("width", x.bandwidth()).attr("y", function (d) { return y1(d.off); }).attr("height", function (d) { return ih - y1(d.off); }).attr("rx", 2)
+      .on("mousemove", function (ev, d) { showTipAt("#months-off", ev, "<b>month " + d.m + "</b><br>" + d.down + " mills in planned outage<br>" + kt(d.off) + " of capacity offline that month<br>demand index " + d.season.toFixed(2)); }).on("mouseleave", function () { d3.select("#months-off .tip").style("display", "none"); });
+    g1.selectAll("text.val").data(months).enter().append("text").attr("class", "val").attr("x", function (d) { return x(d.m) + x.bandwidth() / 2; }).attr("y", function (d) { return y1(d.off) - 4; }).attr("text-anchor", "middle").text(function (d) { return d.down; });
+    var g2 = chartFrame("#months-cost", w, h, m);
+    var ext = d3.extent(months, function (d) { return d.dfr; }); var y2 = d3.scaleLinear().domain([Math.min(0, ext[0]) * 1.15, Math.max(0, ext[1]) * 1.15]).nice().range([ih, 0]);
+    g2.append("g").attr("class", "grid").call(d3.axisLeft(y2).ticks(4).tickSize(-iw).tickFormat(function (v) { return (v >= 0 ? "+" : "−") + "$" + Math.abs(v / 1e6).toFixed(0) + "M"; }));
+    g2.append("g").attr("class", "axis").attr("transform", "translate(0," + ih + ")").call(d3.axisBottom(x).tickSize(0).tickFormat(function (d) { return names[d - 1]; }));
+    g2.append("line").attr("class", "zero").attr("x1", 0).attr("x2", iw).attr("y1", y2(0)).attr("y2", y2(0));
+    g2.selectAll("rect").data(months).enter().append("rect").attr("class", function (d) { return d.dfr >= 0 ? "cost" : "cost neg"; }).attr("x", function (d) { return x(d.m); }).attr("width", x.bandwidth())
+      .attr("y", function (d) { return Math.min(y2(0), y2(d.dfr)); }).attr("height", function (d) { return Math.max(0, Math.abs(y2(d.dfr) - y2(0))); }).attr("rx", 2)
+      .on("mousemove", function (ev, d) { showTipAt("#months-cost", ev, "<b>month " + d.m + "</b><br>network cost of that month's outages: " + (d.dfr >= 0 ? "+" : "−") + musd(Math.abs(d.dfr)) + " (monthly rate)<br>freight, outside purchases at $150/t and unmet demand at $400/t" + (d.unmet > 1000 ? "<br>unmet demand " + kt(d.unmet) : "")); }).on("mouseleave", function () { d3.select("#months-cost .tip").style("display", "none"); });
+  }
+  function drawKnockouts() {
+    var rows = D.knockouts.slice().sort(function (a, b) { return b.d_total - a.d_total; });
+    var w = 680, rowH = 22, m = { l: 190, r: 70, t: 8, b: 26 }, h = m.t + m.b + rows.length * rowH, iw = w - m.l - m.r;
+    var g = chartFrame("#ko-chart", w, h, m);
+    var x = d3.scaleLinear().domain([0, d3.max(rows, function (r) { return Math.max(0, r.d_total); }) * 1.05]).nice().range([0, iw]);
+    var y = d3.scaleBand().domain(rows.map(function (r) { return r.mill; })).range([0, rows.length * rowH]).padding(0.25);
+    g.append("g").attr("class", "grid").attr("transform", "translate(0," + rows.length * rowH + ")").call(d3.axisBottom(x).ticks(5).tickSize(-rows.length * rowH).tickFormat(function (v) { return "+$" + (v / 1e6).toFixed(0) + "M"; }));
+    var r = g.selectAll("g.r").data(rows).enter().append("g").attr("class", "r").attr("transform", function (d) { return "translate(0," + y(d.mill) + ")"; });
+    r.append("rect").attr("x", 0).attr("width", function (d) { return Math.max(0, x(Math.max(0, d.d_total))); }).attr("height", y.bandwidth()).attr("rx", 2).style("fill", function (d) { return ownerVar(d.owner); });
+    r.append("text").attr("class", "lab").attr("x", -8).attr("y", y.bandwidth() / 2 + 4).attr("text-anchor", "end").text(function (d) { return d.name + ", " + d.st; });
+    r.append("text").attr("class", "val").attr("x", function (d) { return x(Math.max(0, d.d_total)) + 5; }).attr("y", y.bandwidth() / 2 + 4).text(function (d) { return kt(d.cap) + (d.unmet > 0 ? " · " + kt(d.unmet) + " unmet" : ""); });
+    r.on("mousemove", function (ev, d) { showTipAt("#ko-chart", ev, "<b>" + d.name + ", " + d.st + "</b> (" + d.owner + ", " + kt(d.cap) + ")<br>network cost if it vanished: +" + musd(d.d_total) + "/yr<br>of which freight " + (d.d_freight >= 0 ? "+" : "−") + musd(Math.abs(d.d_freight)) + "; owner buys " + kt(d.owner_buys) + " outside its system<br>average haul " + (d.d_haul >= 0 ? "+" : "") + d.d_haul + " mi" + (d.unmet > 0 ? "<br>" + kt(d.unmet) + " of demand cannot be served" : "")); })
+     .on("mouseleave", function () { d3.select("#ko-chart .tip").style("display", "none"); })
+     .on("click", function (ev, d) { d3.select("#ko").property("value", "ko" + d.mill); d3.select("#month").property("value", ""); d3.selectAll("#scen button").attr("aria-pressed", "false"); state.scen = "ko" + d.mill; renderMap(); document.getElementById("map").scrollIntoView({ behavior: "smooth", block: "center" }); });
+  }
+
+  /* ---------- boot ---------- */
+  renderLegend();
+  if (window.viz) window.viz("map", renderMap, [arcsOf, arcPath, derived]); else renderMap();
+  drawHaul(); drawMonths(); drawKnockouts();
+  var mo = new MutationObserver(function () { renderMap(); }); mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { renderMap(); });
+})();
+</script>
+</body>
+</html>

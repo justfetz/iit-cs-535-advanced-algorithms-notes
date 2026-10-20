@@ -16,10 +16,12 @@ def haversine(lat1, lon1, lat2, lon2):
 
 # --- freight: $/ton as a function of great-circle miles (road factor 1.2). Truck vs rail breakpoint ~450 mi.
 FREIGHT = dict(road_factor=1.2, truck_fixed=8.0, truck_per_mi=0.125, rail_fixed=35.0, rail_per_mi=0.065)
-def freight_cost(gc_miles, p=FREIGHT):
+DIESEL_BASE = 3.75   # $/gal; fuel is ~22% of truck cost per mile and ~12% of rail cost per mile at this price
+def freight_cost(gc_miles, p=FREIGHT, diesel=DIESEL_BASE):
     road = gc_miles * p["road_factor"]
-    truck = p["truck_fixed"] + p["truck_per_mi"]*road
-    rail = p["rail_fixed"] + p["rail_per_mi"]*road
+    ft = 1 + 0.22*(diesel/DIESEL_BASE - 1); fr = 1 + 0.12*(diesel/DIESEL_BASE - 1)
+    truck = p["truck_fixed"] + p["truck_per_mi"]*road*ft
+    rail = p["rail_fixed"] + p["rail_per_mi"]*road*fr
     return np.minimum(truck, rail), (rail < truck)
 
 # --- state manufacturing share of nonfarm employment (%, approx 2023 BLS) used to tilt box demand toward industrial states
@@ -77,7 +79,10 @@ PORTS = pd.DataFrame([
     columns=["port","lat","lon","share"])
 
 def build_and_solve(mills, nodes, total_demand_tons, owner_shares, export_tons, grade_split=(0.65,0.35),
-                    availability=None, premium=15.0, unmet_penalty=400.0, canada_factor=0.35, verbose=True):
+                    availability=None, premium=15.0, unmet_penalty=400.0, canada_factor=0.35, verbose=True,
+                    diesel=DIESEL_BASE, market_surcharge=None):
+    """market_surcharge: dict owner -> $/ton added to that owner's OPEN-MARKET offers (a unilateral price increase);
+    integrated flows to its own plants are unaffected, so the solver shows which independents switch away."""
     """
     mills: DataFrame[owner, mill_name, lat, lon, capacity_tons_per_year, grades, country, status]
     nodes: DataFrame[node_id, name, lat, lon, w_total]
@@ -96,9 +101,10 @@ def build_and_solve(mills, nodes, total_demand_tons, owner_shares, export_tons, 
     J = len(N); nM = len(M)
     D = N.w_total.values/N.w_total.sum()*total_demand_tons
     dist = haversine(M.lat.values[:,None], M.lon.values[:,None], N.lat.values[None,:], N.lon.values[None,:])
-    cost, by_rail = freight_cost(dist)
+    cost, by_rail = freight_cost(dist, diesel=diesel)
     pdist = haversine(M.lat.values[:,None], M.lon.values[:,None], PORTS.lat.values[None,:], PORTS.lon.values[None,:])
-    pcost, _ = freight_cost(pdist)
+    pcost, _ = freight_cost(pdist, diesel=diesel)
+    surcharge = np.array([(market_surcharge or {}).get(o, 0.0) for o in M.owner.values])
     owners = [k for k in owner_shares if (M.owner==k).any()]
     s_open = 1.0 - sum(owner_shares[k] for k in owners)
     grades = [("L", grade_split[0], liner_ok), ("M", grade_split[1], medium_ok)]
@@ -130,7 +136,7 @@ def build_and_solve(mills, nodes, total_demand_tons, owner_shares, export_tons, 
             if not ok[m]: continue
             for j in range(J):
                 # open-market arc
-                ci = addvar("y", None, m, j, g, cost[m,j]); coef(cap_row[m], ci, 1); coef(open_row[(j,g)], ci, 1)
+                ci = addvar("y", None, m, j, g, cost[m,j] + surcharge[m]); coef(cap_row[m], ci, 1); coef(open_row[(j,g)], ci, 1)
                 k = owner_of[m]
                 if k in owner_shares and k in owners:
                     ci = addvar("x", k, m, j, g, cost[m,j]); coef(cap_row[m], ci, 1); coef(own_row[(k,j,g)], ci, 1)
@@ -171,7 +177,7 @@ def build_and_solve(mills, nodes, total_demand_tons, owner_shares, export_tons, 
     ship = flows[flows.kind.isin(["x","y"])].copy()
     ship["mill"] = M.mill_name.values[ship.m]; ship["mill_owner"] = M.owner.values[ship.m]
     ship["node"] = N.name.values[ship.j]; ship["node_id"] = N.node_id.values[ship.j]
-    ship["miles"] = dist[ship.m, ship.j]*FREIGHT["road_factor"]; ship["rail"] = by_rail[ship.m, ship.j]
+    ship["miles"] = dist[ship.m, ship.j]*FREIGHT["road_factor"]; ship["rail"] = by_rail[ship.m, ship.j]; ship["g"] = ship.g.astype(str)
     ship["cost"] = cost[ship.m, ship.j]*ship.tons
     exp = flows[flows.kind=="z"].copy(); exp["mill"] = M.mill_name.values[exp.m]; exp["port"] = PORTS.port.values[exp.g.astype(int)]
     exp["miles"] = pdist[exp.m, exp.g.astype(int)]*FREIGHT["road_factor"]; exp["cost"] = pcost[exp.m, exp.g.astype(int)]*exp.tons
@@ -203,3 +209,59 @@ def build_and_solve(mills, nodes, total_demand_tons, owner_shares, export_tons, 
         print(f"LP {nvar} vars x {nrow} rows solved in {kpi['solve_seconds']}s; cost ${res.fun/1e6:,.0f}M; "
               f"avg haul {kpi['avg_haul_miles']:.0f} mi; rail share {kpi['rail_share']:.0%}; unmet {unmet:,.0f} t; owner buys {purchased:,.0f} t")
     return dict(mills=M, nodes=N, ship=ship, exports=exp, kpi=kpi, integration=integ)
+
+
+def prospects(mills, nodes, availability=None, diesel=DIESEL_BASE, grade="L"):
+    """For each demand point: the two cheapest active mills by delivered freight for the grade, and the gap between them."""
+    M = mills.reset_index(drop=True)
+    ok = (M.grades.str.contains("linerboard") if grade == "L" else M.grades.str.contains("medium")).values
+    if availability is not None: ok = ok & (availability > 0)
+    dist = haversine(M.lat.values[:,None], M.lon.values[:,None], nodes.lat.values[None,:], nodes.lon.values[None,:])
+    cost, _ = freight_cost(dist, diesel=diesel)
+    cost = np.where(ok[:,None], cost, np.inf)
+    order = np.argsort(cost, axis=0)
+    out = []
+    for j in range(len(nodes)):
+        i1, i2, i3 = order[0, j], order[1, j], order[2, j]
+        out.append(dict(best=int(i1), best_cost=round(float(cost[i1, j]), 1), second=int(i2), second_cost=round(float(cost[i2, j]), 1),
+                        third=int(i3), third_cost=round(float(cost[i3, j]), 1), gap=round(float(cost[i2, j] - cost[i1, j]), 1)))
+    return out
+
+# ---- the fiber loop: OCC generated where boxes are used flows back to recycled mills and export ports
+OCC_PORTS = pd.DataFrame([("Los Angeles/Long Beach CA", 33.75, -118.22, 0.42), ("Seattle/Tacoma WA", 47.27, -122.42, 0.08), ("Oakland CA", 37.80, -122.28, 0.10),
+                          ("New York/NJ", 40.67, -74.05, 0.12), ("Savannah GA", 32.08, -81.09, 0.06), ("Houston TX", 29.76, -95.37, 0.05),
+                          ("Laredo TX (to Mexico)", 27.51, -99.51, 0.12), ("Norfolk VA", 36.85, -76.29, 0.05)], columns=["port","lat","lon","share"])
+def solve_occ(mills, nodes, node_consumption_tons, recovery_rate=0.90, occ_per_ton=1.15, export_tons=6.0e6, utilization=None,
+              diesel=DIESEL_BASE, verbose=True):
+    """Transportation LP: county OCC supply -> recycled-grade mills (demand = recycled capacity x utilization x 1.15) + export ports."""
+    M = mills.reset_index(drop=True)
+    rec = M.grades.str.contains("recycled").values
+    util = np.ones(len(M)) if utilization is None else utilization
+    # a mill's OCC appetite: the recycled share of its grades times its shipped tons, times fiber yield loss
+    rec_share = np.array([ (sum(1 for g in str(gr).split(";") if "recycled" in g) / max(1, len(str(gr).split(";")))) for gr in M.grades.values])
+    appetite = M.capacity_tons_per_year.values * util * rec_share * occ_per_ton
+    sinks_lat = np.concatenate([M.lat.values[appetite > 0], OCC_PORTS.lat.values]); sinks_lon = np.concatenate([M.lon.values[appetite > 0], OCC_PORTS.lon.values])
+    sink_ids = [("mill", int(i)) for i in np.where(appetite > 0)[0]] + [("port", int(p)) for p in range(len(OCC_PORTS))]
+    supply = node_consumption_tons * recovery_rate
+    demand = np.concatenate([appetite[appetite > 0], export_tons*OCC_PORTS.share.values])
+    scale = min(1.0, supply.sum()/demand.sum())           # if more appetite than fiber, mills (and ports) are rationed pro rata
+    demand = demand * scale
+    dist = haversine(nodes.lat.values[:,None], nodes.lon.values[:,None], sinks_lat[None,:], sinks_lon[None,:])
+    cost, by_rail = freight_cost(dist, diesel=diesel)
+    cost = cost * 0.9 + 6.0                                 # baled OCC: similar lanes, slightly cheaper per ton-mile, plus handling
+    J, K = len(nodes), len(sink_ids)
+    c = cost.flatten()
+    from scipy.sparse import coo_matrix
+    rows = np.repeat(np.arange(J), K); cols = np.arange(J*K)
+    A_ub = coo_matrix((np.ones(J*K), (rows, cols)), shape=(J, J*K))          # each county ships at most what it recovers
+    rows2 = np.tile(np.arange(K), J); A_eq = coo_matrix((np.ones(J*K), (rows2, cols)), shape=(K, J*K))
+    res = linprog(c, A_ub=A_ub, b_ub=supply, A_eq=A_eq, b_eq=demand, bounds=(0, None), method="highs")
+    if res.status != 0: raise RuntimeError("OCC LP: " + res.message)
+    X = res.x.reshape(J, K)
+    flows = [(j, k, X[j, k]) for j, k in zip(*np.where(X > 1000))]
+    surplus = supply - X.sum(axis=1)                     # fiber recovered but not placed (landfill / other grades / inventory)
+    duals = res.ineqlin.marginals                         # value of one more ton of OCC at each county (<= 0): the scarcity surface
+    kpi = dict(occ_supply=float(supply.sum()), occ_to_mills=float(X[:, :len(sink_ids)-len(OCC_PORTS)].sum()), occ_exported=float(X[:, len(sink_ids)-len(OCC_PORTS):].sum()),
+               occ_unplaced=float(surplus.sum()), appetite_scale=scale, avg_haul=float((X*dist*FREIGHT["road_factor"]).sum()/X.sum()), freight_usd=float((X*cost).sum()))
+    if verbose: print("OCC loop:", {k: (round(v/1e6, 2) if v > 1e4 else round(v, 2)) for k, v in kpi.items()})
+    return dict(flows=flows, sinks=sink_ids, X=X, supply=supply, demand=demand, surplus=surplus, county_value=-duals, kpi=kpi, dist=dist)
